@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aider Repository Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #2d2d2d;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            overflow: hidden;
+            border: 1px solid #404040;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+        
+        .card {
+            background: #3a3a3a;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            border: 1px solid #4a4a4a;
+        }
+        
+        .card h2 {
+            color: #ffffff;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #2a5298;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+        
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #555555;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+            background: #2a2a2a;
+            color: #ffffff;
+        }
+        
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+            outline: none;
+            border-color: #2a5298;
+            background: #333333;
+        }
+        
+        .form-group input::placeholder, .form-group textarea::placeholder {
+            color: #888888;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #2a5298 0%, #1e3c72 100%);
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-right: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(42, 82, 152, 0.4);
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(135deg, #666666 0%, #444444 100%);
+            color: #ffffff;
+        }
+        
+        .btn-secondary:hover {
+            box-shadow: 0 5px 15px rgba(102, 102, 102, 0.4);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+        }
+        
+        .btn-danger:hover {
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+        
+        .repo-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .repo-item {
+            background: #404040;
+            border: 1px solid #555555;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+        
+        .repo-item:hover {
+            box-shadow: 0 3px 10px rgba(255,255,255,0.1);
+            background: #4a4a4a;
+        }
+        
+        .repo-name {
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 5px;
+        }
+        
+        .repo-url {
+            color: #b0b0b0;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        
+        .repo-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8em;
+            color: #cccccc;
+        }
+        
+        .status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid #444444;
+            border-top: 4px solid #2a5298;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .execute-section {
+            background: #3a3a3a;
+            border-radius: 10px;
+            padding: 25px;
+            margin-top: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            border: 1px solid #4a4a4a;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                gap: 20px;
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Aider Repository Manager</h1>
+            <p>Manage your GitHub repositories and execute AI-powered code changes</p>
+            <p style="font-size: 0.9em; opacity: 0.8;">Base Path: C:/Users/batal/OneDrive/Documents/GitHub/ai</p>
+        </div>
+        
+        <div class="main-content">
+            <!-- Add Repository Form -->
+            <div class="card">
+                <h2>➕ Add Repository</h2>
+                <form id="add-repo-form">
+                    <div class="form-group">
+                        <label for="repo-name">Repository Name *</label>
+                        <input type="text" id="repo-name" name="name" required placeholder="my-awesome-project">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="github-url">GitHub URL *</label>
+                        <input type="url" id="github-url" name="github_url" required 
+                               placeholder="https://github.com/username/repo">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="owner">Owner/Organization *</label>
+                        <input type="text" id="owner" name="owner" required placeholder="username">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="branch">Branch</label>
+                        <input type="text" id="branch" name="branch" value="main" placeholder="main">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="github-token">GitHub Token (Optional)</label>
+                        <input type="password" id="github-token" name="github_token" 
+                               placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="local-path">Local Path (Auto-generated)</label>
+                        <input type="text" id="local-path" name="local_path" readonly
+                               placeholder="Will be auto-generated from repo name"
+                               style="background: #1a1a1a; color: #888888; cursor: not-allowed;">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="description">Description</label>
+                        <textarea id="description" name="description" rows="3" 
+                                  placeholder="Brief description of the repository..."></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn">💾 Add Repository</button>
+                </form>
+            </div>
+            
+            <!-- Repository List -->
+            <div class="card">
+                <h2>📁 Repositories</h2>
+                <div class="loading" id="repos-loading">
+                    <div class="spinner"></div>
+                    <p>Loading repositories...</p>
+                </div>
+                <div class="repo-list" id="repo-list">
+                    <!-- Repositories will be loaded here -->
+                </div>
+                <button class="btn btn-secondary" onclick="loadRepositories()">🔄 Refresh</button>
+            </div>
+            
+            <!-- Execute Code Changes -->
+            <div class="execute-section full-width">
+                <h2>🤖 Execute Code Changes</h2>
+                <form id="execute-form">
+                    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px;">
+                        <div class="form-group">
+                            <label for="repo-select">Select Repository *</label>
+                            <select id="repo-select" name="repo_id" required>
+                                <option value="">Choose a repository...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="instructions">Instructions *</label>
+                            <textarea id="instructions" name="instructions" rows="4" required
+                                      placeholder="Add a new function that calculates fibonacci numbers..."></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label style="color: #e0e0e0;">
+                            <input type="checkbox" id="dry-run" name="dry_run" style="margin-right: 8px;"> 
+                            Dry Run (preview changes without applying)
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="btn">⚡ Execute Changes</button>
+                </form>
+                
+                <div id="execution-result" style="margin-top: 20px; display: none;">
+                    <h3 style="color: #ffffff;">Execution Result:</h3>
+                    <pre id="result-content" style="background: #2a2a2a; color: #ffffff; padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid #555555;"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        const API_KEY = 'change_this_to_a_strong_key'; // TODO: Make this configurable
+        
+        // Load repositories on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadRepositories();
+        });
+        
+        // Add repository form submission
+        document.getElementById('add-repo-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const repoData = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch(`${API_BASE}/repositories`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    body: JSON.stringify(repoData)
+                });
+                
+                if (response.ok) {
+                    showStatus('Repository added successfully!', 'success');
+                    e.target.reset();
+                    loadRepositories();
+                } else {
+                    const error = await response.json();
+                    showStatus(`Error: ${error.detail}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        });
+        
+        // Execute form submission
+        document.getElementById('execute-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const executeData = {
+                repo_id: parseInt(formData.get('repo_id')),
+                instructions: formData.get('instructions'),
+                dry_run: formData.has('dry_run')
+            };
+            
+            const resultDiv = document.getElementById('execution-result');
+            const resultContent = document.getElementById('result-content');
+            
+            try {
+                resultDiv.style.display = 'block';
+                resultContent.textContent = 'Executing...';
+                
+                const response = await fetch(`${API_BASE}/update-code-by-id`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    body: JSON.stringify(executeData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    resultContent.textContent = JSON.stringify(result, null, 2);
+                    showStatus('Code changes executed successfully!', 'success');
+                } else {
+                    resultContent.textContent = JSON.stringify(result, null, 2);
+                    showStatus(`Error: ${result.detail}`, 'error');
+                }
+            } catch (error) {
+                resultContent.textContent = `Error: ${error.message}`;
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        });
+        
+        // Load repositories function
+        async function loadRepositories() {
+            const loadingDiv = document.getElementById('repos-loading');
+            const repoList = document.getElementById('repo-list');
+            const repoSelect = document.getElementById('repo-select');
+            
+            loadingDiv.style.display = 'block';
+            repoList.innerHTML = '';
+            repoSelect.innerHTML = '<option value="">Choose a repository...</option>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/repositories`, {
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const repos = await response.json();
+                    
+                    repos.forEach(repo => {
+                        // Add to list
+                        const repoItem = createRepoItem(repo);
+                        repoList.appendChild(repoItem);
+                        
+                        // Add to select
+                        const option = document.createElement('option');
+                        option.value = repo.id;
+                        option.textContent = `${repo.name} (${repo.owner})`;
+                        repoSelect.appendChild(option);
+                    });
+                    
+                    if (repos.length === 0) {
+                        repoList.innerHTML = '<p style="text-align: center; color: #cccccc;">No repositories found. Add one above!</p>';
+                    }
+                } else {
+                    repoList.innerHTML = '<p style="text-align: center; color: #ff6b6b;">Error loading repositories</p>';
+                }
+            } catch (error) {
+                repoList.innerHTML = '<p style="text-align: center; color: #ff6b6b;">Error loading repositories</p>';
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+        
+        // Create repository item HTML
+        function createRepoItem(repo) {
+            const div = document.createElement('div');
+            div.className = 'repo-item';
+            div.innerHTML = `
+                <div class="repo-name">${repo.name}</div>
+                <div class="repo-url">${repo.github_url}</div>
+                <div style="color: #888; font-size: 0.8em; margin-bottom: 8px;">📁 ${repo.local_path || 'No local path'}</div>
+                <div class="repo-meta">
+                    <span>Owner: ${repo.owner} | Branch: ${repo.branch}</span>
+                    <div>
+                        <button class="btn btn-secondary" onclick="editRepo(${repo.id})" style="padding: 4px 8px; font-size: 12px;">✏️ Edit</button>
+                        <button class="btn btn-danger" onclick="deleteRepo(${repo.id})" style="padding: 4px 8px; font-size: 12px;">🗑️ Delete</button>
+                    </div>
+                </div>
+            `;
+            return div;
+        }
+        
+        // Delete repository
+        async function deleteRepo(repoId) {
+            if (!confirm('Are you sure you want to delete this repository?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/repositories/${repoId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`
+                    }
+                });
+                
+                if (response.ok) {
+                    showStatus('Repository deleted successfully!', 'success');
+                    loadRepositories();
+                } else {
+                    const error = await response.json();
+                    showStatus(`Error: ${error.detail}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Edit repository (placeholder)
+        function editRepo(repoId) {
+            showStatus('Edit functionality coming soon!', 'success');
+        }
+        
+        // Show status message
+        function showStatus(message, type) {
+            // Create a simple toast notification
+            const toast = document.createElement('div');
+            toast.className = `status ${type}`;
+            toast.textContent = message;
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 15px 20px;
+                border-radius: 8px;
+                z-index: 1000;
+                font-weight: 600;
+                animation: slideIn 0.3s ease;
+            `;
+            
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 5000);
+        }
+        
+        // Auto-fill owner and repo name from GitHub URL
+        document.getElementById('github-url').addEventListener('input', function(e) {
+            const url = e.target.value;
+            const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
+            if (match) {
+                const owner = match[1];
+                const repoName = match[2].replace('.git', '');
+                
+                // Auto-fill owner
+                document.getElementById('owner').value = owner;
+                
+                // Auto-fill repo name if empty
+                if (!document.getElementById('repo-name').value) {
+                    document.getElementById('repo-name').value = repoName;
+                }
+                
+                // Auto-generate local path with owner
+                const basePath = 'C:/Users/batal/OneDrive/Documents/GitHub/ai';
+                document.getElementById('local-path').value = `${basePath}/${owner}/${repoName}`;
+            }
+        });
+        
+        // Also update local path when repo name or owner changes
+        function updateLocalPath() {
+            const repoName = document.getElementById('repo-name').value;
+            const owner = document.getElementById('owner').value;
+            if (repoName && owner) {
+                const basePath = 'C:/Users/batal/OneDrive/Documents/GitHub/ai';
+                document.getElementById('local-path').value = `${basePath}/${owner}/${repoName}`;
+            }
+        }
+        
+        document.getElementById('repo-name').addEventListener('input', updateLocalPath);
+        document.getElementById('owner').addEventListener('input', updateLocalPath);
+    </script>
+</body>
+</html>
