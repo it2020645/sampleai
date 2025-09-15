@@ -266,7 +266,7 @@
                     
                     <div class="form-group">
                         <label for="branch">Branch</label>
-                        <input type="text" id="branch" name="branch" value="main" placeholder="main">
+                        <input type="text" id="branch" name="branch" value="master" placeholder="master">
                     </div>
                     
                     <div class="form-group">
@@ -325,10 +325,28 @@
                     </div>
                     
                     <div class="form-group">
-                        <label style="color: #e0e0e0;">
+                        <label style="color: #e0e0e0; display: block; margin-bottom: 10px;">
                             <input type="checkbox" id="dry-run" name="dry_run" style="margin-right: 8px;"> 
                             Dry Run (preview changes without applying)
                         </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div style="background: #2a4a2a; border: 1px solid #4a6a4a; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+                            <small style="color: #a0d0a0;">ℹ️ <strong>Smart Workflow:</strong> Creates branch → Waits for CI/CD success → Creates PR automatically</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="github-token" style="color: #e0e0e0;">GitHub Token (optional - uses repo token if blank):</label>
+                        <input type="password" id="github-token" name="github_token" placeholder="Leave blank to use repository's stored token" style="background: #333; color: #ffffff; border: 1px solid #555555; padding: 8px; border-radius: 4px; width: 100%; margin-top: 5px;">
+                        <small style="color: #b0b0b0; display: block; margin-top: 5px;">Required for creating pull requests. Will use repository's token if left empty.</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="pr-target-branch" style="color: #e0e0e0;">Pull Request Target Branch:</label>
+                        <input type="text" id="pr-target-branch" name="pr_target_branch" value="master" placeholder="master" style="background: #333; color: #ffffff; border: 1px solid #555555; padding: 8px; border-radius: 4px; width: 100%; margin-top: 5px;">
+                        <small style="color: #b0b0b0; display: block; margin-top: 5px;">PR created automatically after CI/CD passes (waits up to 10 minutes)</small>
                     </div>
                     
                     <button type="submit" class="btn">⚡ Execute Changes</button>
@@ -344,7 +362,7 @@
 
     <script>
         const API_BASE = 'http://localhost:8000';
-        const API_KEY = 'change_this_to_a_strong_key'; // TODO: Make this configurable
+        const API_KEY = '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'; // Load from server config
         
         // Load repositories on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -389,7 +407,10 @@
             const executeData = {
                 repo_id: parseInt(formData.get('repo_id')),
                 instructions: formData.get('instructions'),
-                dry_run: formData.has('dry_run')
+                dry_run: formData.has('dry_run'),
+                github_token: formData.get('github_token') || null,
+                create_pull_request: true,  // Always attempt PR creation if token provided
+                pr_target_branch: formData.get('pr_target_branch') || 'master'
             };
             
             const resultDiv = document.getElementById('execution-result');
@@ -411,17 +432,146 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    resultContent.textContent = JSON.stringify(result, null, 2);
+                    // Format the result with branch information
+                    let resultText = `Status: ${result.status}\n`;
+                    if (result.result && result.result.branch_info) {
+                        const branchInfo = result.result.branch_info;
+                        resultText += `\n🌿 Branch Management:\n`;
+                        resultText += `   Created Branch: ${branchInfo.created_branch}\n`;
+                        resultText += `   Original Branch: ${branchInfo.original_branch}\n`;
+                        if (branchInfo.pushed_to_remote) {
+                            resultText += `   📤 Pushed to Remote: Yes\n`;
+                        }
+                        if (branchInfo.pull_request) {
+                            const pr = branchInfo.pull_request;
+                            resultText += `   🔀 Pull Request: #${pr.pr_number}\n`;
+                            resultText += `   🔗 PR URL: ${pr.pr_url}\n`;
+                            
+                            // Show CI/CD status if available
+                            if (pr.ci_status) {
+                                const ciStatus = pr.ci_status.status;
+                                const statusEmoji = getStatusEmoji(ciStatus);
+                                resultText += `   ${statusEmoji} CI/CD Status: ${ciStatus}\n`;
+                                
+                                if (pr.status_check_url) {
+                                    resultText += `   📊 Check Details: ${pr.status_check_url}\n`;
+                                }
+                                
+                                // Show individual check results
+                                if (pr.ci_status.statuses && pr.ci_status.statuses.length > 0) {
+                                    resultText += `   📋 Checks:\n`;
+                                    pr.ci_status.statuses.forEach(check => {
+                                        const checkEmoji = getStatusEmoji(check.state);
+                                        resultText += `      ${checkEmoji} ${check.context}: ${check.state}\n`;
+                                    });
+                                }
+                            }
+                        } else if (branchInfo.pushed_to_remote && !branchInfo.pull_request) {
+                            // PR was not created - check if it was due to CI/CD wait
+                            resultText += `   ⏳ CI/CD Status: Waiting for checks to complete\n`;
+                            resultText += `   📝 PR will be created automatically after CI/CD passes\n`;
+                        }
+                        resultText += `\n`;
+                    }
+                    resultText += `\nFull Response:\n${JSON.stringify(result, null, 2)}`;
+                    resultContent.textContent = resultText;
+                    
+                    // Add CI status check button if PR was created
+                    if (result.result && result.result.branch_info && result.result.branch_info.pull_request) {
+                        const branchName = result.result.branch_info.created_branch;
+                        const ciButton = document.createElement('button');
+                        ciButton.textContent = '🔄 Check CI/CD Status';
+                        ciButton.className = 'btn';
+                        ciButton.style.cssText = 'background: #28a745; margin: 10px 0; display: block;';
+                        ciButton.onclick = () => refreshCIStatus(executeData.repo_id, branchName, resultContent);
+                        
+                        const buttonContainer = document.createElement('div');
+                        buttonContainer.appendChild(ciButton);
+                        resultContent.parentNode.insertBefore(buttonContainer, resultContent.nextSibling);
+                    }
+                    
                     showStatus('Code changes executed successfully!', 'success');
                 } else {
-                    resultContent.textContent = JSON.stringify(result, null, 2);
-                    showStatus(`Error: ${result.detail}`, 'error');
+                    if (result.detail && result.detail.includes('Repository path does not exist')) {
+                        resultContent.innerHTML = `<div style="color: #ffcc00;">
+                            <strong>⚠️ Repository Not Found Locally</strong><br><br>
+                            The repository needs to be cloned first.<br><br>
+                            <button onclick="cloneRepository(${executeData.repo_id})" class="btn" style="background: #2a5298; margin: 10px 0;">📥 Clone Repository Now</button><br><br>
+                            <details style="margin-top: 10px;">
+                                <summary style="cursor: pointer; color: #cccccc;">Show Error Details</summary>
+                                <pre style="margin-top: 10px; color: #ff6b6b;">${result.detail}</pre>
+                            </details>
+                        </div>`;
+                        showStatus('Repository needs to be cloned first', 'error');
+                    } else {
+                        resultContent.textContent = JSON.stringify(result, null, 2);
+                        showStatus(`Error: ${result.detail}`, 'error');
+                    }
                 }
             } catch (error) {
                 resultContent.textContent = `Error: ${error.message}`;
                 showStatus(`Error: ${error.message}`, 'error');
             }
         });
+        
+        // Clone repository function
+        async function cloneRepository(repoId) {
+            const resultDiv = document.getElementById('execution-result');
+            const resultContent = document.getElementById('result-content');
+            
+            resultContent.innerHTML = '<div class="spinner"></div>Cloning repository...';
+            showStatus('Cloning repository...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/repositories/${repoId}/clone`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    if (result.status === 'success') {
+                        resultContent.innerHTML = `<div style="color: #4caf50;">
+                            <strong>✅ Repository Cloned Successfully!</strong><br><br>
+                            <strong>Path:</strong> ${result.path}<br><br>
+                            <div style="background: #2a2a2a; padding: 10px; border-radius: 5px; margin: 10px 0; border-left: 3px solid #4caf50;">
+                                You can now execute code changes on this repository.
+                            </div>
+                        </div>`;
+                        showStatus('Repository cloned successfully!', 'success');
+                    } else if (result.status === 'already_exists') {
+                        resultContent.innerHTML = `<div style="color: #ffcc00;">
+                            <strong>ℹ️ Repository Already Exists</strong><br><br>
+                            ${result.message}
+                        </div>`;
+                        showStatus('Repository already exists locally', 'info');
+                    } else {
+                        resultContent.innerHTML = `<div style="color: #ff6b6b;">
+                            <strong>❌ Clone Failed</strong><br><br>
+                            ${result.message}<br><br>
+                            ${result.manual_command ? `<div style="background: #2a2a2a; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                                <strong>Manual command:</strong><br>
+                                <code style="color: #ffcc00;">${result.manual_command}</code>
+                            </div>` : ''}
+                        </div>`;
+                        showStatus('Clone failed', 'error');
+                    }
+                } else {
+                    resultContent.innerHTML = `<div style="color: #ff6b6b;">
+                        <strong>Error:</strong> ${result.detail || 'Failed to clone repository'}
+                    </div>`;
+                    showStatus('Clone failed', 'error');
+                }
+            } catch (error) {
+                resultContent.innerHTML = `<div style="color: #ff6b6b;">
+                    <strong>Error:</strong> ${error.message}
+                </div>`;
+                showStatus(`Clone error: ${error.message}`, 'error');
+            }
+        }
         
         // Load repositories function
         async function loadRepositories() {
@@ -516,6 +666,84 @@
             showStatus('Edit functionality coming soon!', 'success');
         }
         
+        // Get status emoji based on CI/CD status
+        function getStatusEmoji(status) {
+            switch (status) {
+                case 'success': return '✅';
+                case 'failure': return '❌';
+                case 'error': return '🚨';
+                case 'pending': return '🟡';
+                default: return '❓';
+            }
+        }
+        
+        // Check CI/CD status for a branch
+        async function checkCIStatus(repoId, branchName) {
+            try {
+                const response = await fetch(`${API_BASE}/repositories/${repoId}/ci-status/${branchName}`, {
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    return result.ci_status;
+                } else {
+                    console.warn('Could not fetch CI status:', await response.text());
+                    return null;
+                }
+            } catch (error) {
+                console.warn('CI status check failed:', error);
+                return null;
+            }
+        }
+        
+        // Refresh CI/CD status and display results
+        async function refreshCIStatus(repoId, branchName, resultContainer) {
+            const statusDiv = document.createElement('div');
+            statusDiv.innerHTML = '<p>🔄 Checking CI/CD status...</p>';
+            statusDiv.style.cssText = 'background: #2a2a2a; padding: 15px; margin: 10px 0; border-radius: 5px; border: 1px solid #444;';
+            
+            // Remove any existing CI status display
+            const existingStatus = resultContainer.parentNode.querySelector('.ci-status-display');
+            if (existingStatus) {
+                existingStatus.remove();
+            }
+            
+            statusDiv.className = 'ci-status-display';
+            resultContainer.parentNode.insertBefore(statusDiv, resultContainer.nextSibling);
+            
+            const ciStatus = await checkCIStatus(repoId, branchName);
+            
+            if (ciStatus) {
+                const statusEmoji = getStatusEmoji(ciStatus.status);
+                let statusHtml = `<h4>${statusEmoji} CI/CD Status: ${ciStatus.status.toUpperCase()}</h4>`;
+                
+                if (ciStatus.statuses && ciStatus.statuses.length > 0) {
+                    statusHtml += '<div style="margin-top: 10px;"><strong>📋 Individual Checks:</strong><ul style="margin: 5px 0; padding-left: 20px;">';
+                    ciStatus.statuses.forEach(check => {
+                        const checkEmoji = getStatusEmoji(check.state);
+                        statusHtml += `<li>${checkEmoji} <strong>${check.context}</strong>: ${check.state}`;
+                        if (check.description) {
+                            statusHtml += ` - ${check.description}`;
+                        }
+                        if (check.target_url) {
+                            statusHtml += ` <a href="${check.target_url}" target="_blank" style="color: #4a9eff;">🔗 Details</a>`;
+                        }
+                        statusHtml += '</li>';
+                    });
+                    statusHtml += '</ul></div>';
+                } else {
+                    statusHtml += '<p style="color: #888; font-style: italic;">No specific checks configured or still initializing...</p>';
+                }
+                
+                statusDiv.innerHTML = statusHtml;
+            } else {
+                statusDiv.innerHTML = '<p style="color: #ff6b6b;">❌ Could not fetch CI/CD status. Check if GitHub token is configured and has proper permissions.</p>';
+            }
+        }
+
         // Show status message
         function showStatus(message, type) {
             // Create a simple toast notification

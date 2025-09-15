@@ -173,11 +173,11 @@ class LightDatabase:
             return cursor.rowcount > 0
     
     def delete_repository(self, repo_id: int) -> bool:
-        """Soft delete a repository (mark as inactive)."""
+        """Hard delete a repository (remove row from database)."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-                UPDATE repositories SET is_active = 0, updated_at = ? WHERE id = ?
-            """, (datetime.now().isoformat(), repo_id))
+                DELETE FROM repositories WHERE id = ?
+            """, (repo_id,))
             conn.commit()
             return cursor.rowcount > 0
     

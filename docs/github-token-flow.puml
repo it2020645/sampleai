@@ -1,0 +1,46 @@
+@startuml GitHub Token Flow
+!theme aws-orange
+title GitHub Token Handling - Web Interface Only
+
+actor User
+participant "Web Interface" as UI
+participant "FastAPI API" as API
+participant "GitHub API" as GITHUB
+
+== User Provides Token Scenario ==
+User -> UI: Enter GitHub token in form
+User -> UI: Check "Create pull request"
+UI -> UI: Show PR target branch field
+User -> UI: Submit form
+
+UI -> API: POST /update-code-by-id\n{\n  ...,\n  "github_token": "ghp_user_provided_token",\n  "create_pull_request": true,\n  "pr_target_branch": "main"\n}
+
+API -> API: Process aider execution\n& create branch
+API -> API: if create_pull_request AND github_token:
+API -> GITHUB: Create PR using user token
+GITHUB --> API: PR created successfully
+API --> UI: Success with PR URL
+
+== User Leaves Token Blank Scenario ==
+User -> UI: Leave GitHub token field empty
+User -> UI: Check "Create pull request"
+UI -> API: POST /update-code-by-id\n{\n  ...,\n  "github_token": null,\n  "create_pull_request": true\n}
+
+API -> API: Process aider execution\n& create branch
+API -> API: if not github_token:
+API -> API: return {"success": false,\n  "error": "GitHub token required..."}
+API --> UI: Branch created but PR failed
+UI --> User: Show: "Branch created successfully\nbut PR creation failed - no token"
+
+== No PR Creation Scenario ==
+User -> UI: Leave "Create pull request" unchecked
+UI -> API: POST /update-code-by-id\n{\n  ...,\n  "create_pull_request": false\n}
+
+API -> API: Process aider execution\n& create branch
+API -> API: Skip PR creation logic entirely
+API --> UI: Success - branch created only
+UI --> User: "Changes applied and pushed\nto branch: feature/aider-{timestamp}"
+
+note over API: No .env GITHUB_TOKEN fallback\nNo token storage in database\nPurely user-input driven
+
+@enduml
