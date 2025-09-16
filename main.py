@@ -50,6 +50,8 @@ PR_TARGET_BRANCH = os.getenv("PR_TARGET_BRANCH", "master")
 # CI/CD Integration
 WAIT_FOR_CI = os.getenv("WAIT_FOR_CI", "true").lower() == "true"
 CI_WAIT_TIMEOUT_MINUTES = int(os.getenv("CI_WAIT_TIMEOUT_MINUTES", "2"))  # Reduced to 2 minutes for testing
+CHECK_RUNNING_WORKFLOWS = os.getenv("CHECK_RUNNING_WORKFLOWS", "true").lower() == "true"
+WORKFLOW_WAIT_TIMEOUT_MINUTES = int(os.getenv("WORKFLOW_WAIT_TIMEOUT_MINUTES", "5"))  # Wait up to 5 minutes for workflows
 
 # === ENDPOINTS ===
 ENDPOINT_UPDATE_CODE = "/update-code"
@@ -297,6 +299,70 @@ def wait_for_ci_success(github_url: str, branch_name: str, github_token: str, ma
 
     print(f"CI/CD timed out after {max_wait_minutes} minutes for {branch_name}")
     return False
+
+def check_workflow_runs(github_url: str, branch_name: str, github_token: str) -> dict:
+    """
+    Check if there are any running workflow runs on the target branch.
+    Returns dict with workflow run information.
+    """
+    try:
+        import re
+        import requests
+        
+        # Extract owner and repo from GitHub URL
+        match = re.match(r'https://github\.com/([^/]+)/([^/]+)(?:\.git)?', github_url)
+        if not match:
+            return {"has_running_workflows": False, "error": "Invalid GitHub URL format", "safe_to_proceed": True}
+        
+        owner, repo = match.groups()
+        repo = repo.replace('.git', '')
+        
+        # Get workflow runs for the branch
+        url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs"
+        headers = {
+            "Authorization": f"token {github_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        params = {
+            "branch": branch_name,
+            "status": "in_progress"
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        
+        if response.status_code == 200:
+            data = response.json()
+            running_workflows = data.get("workflow_runs", [])
+            return {
+                "has_running_workflows": len(running_workflows) > 0,
+                "running_count": len(running_workflows),
+                "safe_to_proceed": len(running_workflows) == 0,
+                "workflows": [
+                    {
+                        "id": w.get("id"),
+                        "name": w.get("name", ""),
+                        "status": w.get("status", ""),
+                        "conclusion": w.get("conclusion"),
+                        "html_url": w.get("html_url", "")
+                    }
+                    for w in running_workflows
+                ]
+            }
+        elif response.status_code == 404:
+            # Repository might not exist, or no workflows configured yet
+            print(f"No workflows found for {owner}/{repo} on branch {branch_name} (first push or no CI/CD configured)")
+            return {"has_running_workflows": False, "safe_to_proceed": True, "reason": "no_workflows_configured"}
+        else:
+            print(f"GitHub API returned {response.status_code} when checking workflows")
+            return {"has_running_workflows": False, "safe_to_proceed": True, "error": f"GitHub API error: {response.status_code}"}
+            
+    except ImportError:
+        print("requests library not installed")
+        return {"has_running_workflows": False, "safe_to_proceed": True, "error": "requests library not installed"}
+    except Exception as e:
+        print(f"Error checking workflows: {e}")
+        return {"has_running_workflows": False, "safe_to_proceed": True, "error": str(e)}
 
 def get_ci_status(github_url: str, branch_name: str, github_token: str) -> dict:
     """
@@ -616,6 +682,42 @@ This file was created because aider was not available.
 
     if success and created_branch:
         print(f"run_aider: Attempting to push branch {created_branch} to remote (forced push)")
+        
+        # Check if there are running CI/CD workflows on target branch before pushing
+        if CHECK_RUNNING_WORKFLOWS and github_token and github_url:
+            print(f"Checking for running workflows on {pr_target_branch} branch...")
+            workflow_status = check_workflow_runs(github_url, pr_target_branch, github_token)
+            
+            if workflow_status.get("reason") == "no_workflows_configured":
+                print(f"No CI/CD workflows configured for {pr_target_branch} - this appears to be a first push or repository without CI/CD")
+                print("Safe to proceed with push")
+            elif workflow_status.get("has_running_workflows"):
+                print(f"Found {workflow_status.get('running_count', 0)} running workflows on {pr_target_branch}")
+                print("Waiting for workflows to complete before pushing...")
+                
+                # Wait for workflows to complete (with timeout)
+                max_wait_time = WORKFLOW_WAIT_TIMEOUT_MINUTES * 60  # Convert to seconds
+                wait_interval = 30   # 30 seconds
+                waited = 0
+                
+                while waited < max_wait_time:
+                    workflow_status = check_workflow_runs(github_url, pr_target_branch, github_token)
+                    if not workflow_status.get("has_running_workflows"):
+                        print(f"All workflows completed on {pr_target_branch}")
+                        break
+                    
+                    print(f"Still {workflow_status.get('running_count', 0)} workflows running. Waiting {wait_interval}s...")
+                    time.sleep(wait_interval)
+                    waited += wait_interval
+                
+                if waited >= max_wait_time:
+                    print(f"Timeout waiting for workflows to complete on {pr_target_branch}")
+                    print("Proceeding with push anyway...")
+            else:
+                print(f"No running workflows found on {pr_target_branch}, safe to proceed")
+        else:
+            print("Workflow checking disabled or missing GitHub token, proceeding with push")
+        
         push_result = push_branch_to_remote(repo_path, created_branch, github_url, github_token)
         if push_result.get("success"):
             print(f"run_aider: Branch {created_branch} successfully pushed to remote.")
