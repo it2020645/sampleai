@@ -1,0 +1,36 @@
+title AI Repository Management System Flow
+
+User->Web Interface: Enter repo details & instructions
+Web Interface->FastAPI Server: POST /update-code-by-id
+FastAPI Server->SQLite Database: get_repository(repo_id)
+SQLite Database-->FastAPI Server: repository details
+
+alt Repository not exists locally
+    FastAPI Server->Git Repository: git clone <github_url>
+    Git Repository-->FastAPI Server: Repository cloned
+end
+
+alt Create branch enabled
+    FastAPI Server->Git Repository: git checkout -b feature/aider-{timestamp}
+    Git Repository-->FastAPI Server: New branch created
+end
+
+FastAPI Server->Aider AI: Execute with instructions
+Aider AI->Git Repository: Analyze & apply changes
+Aider AI-->FastAPI Server: Execution results
+
+alt Push enabled
+    FastAPI Server->Git Repository: git push origin <branch>
+    Git Repository-->FastAPI Server: Push successful
+end
+
+alt Create PR enabled & token provided
+    FastAPI Server->GitHub API: Create pull request
+    GitHub API-->FastAPI Server: PR created
+else No token
+    FastAPI Server->FastAPI Server: Skip PR creation
+end
+
+FastAPI Server->SQLite Database: Log execution results
+FastAPI Server-->Web Interface: Complete results
+Web Interface-->User: Display success/failure

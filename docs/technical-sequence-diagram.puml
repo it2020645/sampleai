@@ -1,0 +1,92 @@
+@startuml Technical Data Flow
+!theme cerulean-outline
+title Technical Authentication & Data Flow
+
+actor User as U
+box "Frontend" #LightBlue
+    participant "HTML/JS Interface" as UI
+end box
+
+box "Backend Services" #LightGreen
+    participant "FastAPI Server" as API
+    participant "Authentication" as AUTH
+    participant "Database Layer" as DB
+end box
+
+box "External Services" #LightYellow
+    participant "Local Git" as GIT
+    participant "Aider CLI" as AIDER
+    participant "GitHub API" as GITHUB
+end box
+
+== Authentication Flow ==
+U -> UI: Access application
+UI -> API: GET /repositories\nAuthorization: Bearer {API_KEY}
+API -> AUTH: Validate API key
+AUTH -> AUTH: Check against AIDER_API_KEY
+AUTH --> API: Authentication result
+
+alt Invalid API Key
+    API --> UI: 403 Forbidden
+    UI --> U: "Error loading repositories"
+else Valid API Key
+    API -> DB: get_all_repositories()
+    DB --> API: Repository list
+    API --> UI: 200 OK + JSON data
+    UI --> U: Display repositories
+end
+
+== Code Execution with User-Provided Settings ==
+U -> UI: Fill form:\n- Select repository\n- Enter instructions\n- Optional: GitHub token\n- Check: Create branch\n- Check: Create PR
+UI -> API: POST /update-code-by-id\n{\n  repo_id: 1,\n  instructions: "...",\n  create_branch: true,\n  github_token: "ghp_...",\n  create_pull_request: true,\n  pr_target_branch: "main"\n}
+
+API -> AUTH: Validate API key
+AUTH --> API: Valid
+
+API -> DB: get_repository(repo_id)
+DB --> API: {\n  id: 1,\n  github_url: "https://github.com/owner/repo.git",\n  local_path: "/path/to/repo",\n  ...\n}
+
+== Repository Preparation ==
+alt Local repository missing
+    API -> GIT: subprocess.run([\n  "git", "clone", github_url, local_path\n])
+    GIT --> API: Clone result
+end
+
+alt Create branch requested
+    API -> GIT: git checkout -b feature/aider-{timestamp}
+    API -> GIT: git remote set-url origin {github_url}
+    GIT --> API: Branch created & origin set
+end
+
+== AI Processing ==
+API -> AIDER: subprocess.run([\n  "aider", "--yes", "--message", instructions\n], cwd=repo_path)
+AIDER -> GIT: Read repository files
+AIDER -> AIDER: Process AI instructions\n(OpenAI API call)
+AIDER -> GIT: Apply code changes
+AIDER -> GIT: git commit -m "AI changes"
+AIDER --> API: {\n  returncode: 0,\n  stdout: "Changes applied...",\n  stderr: ""\n}
+
+== Git Operations ==
+alt Push to origin enabled
+    API -> GIT: git push origin {branch_name}
+    GIT --> API: Push successful
+end
+
+== GitHub Integration ==
+alt PR creation requested AND token provided
+    API -> GITHUB: POST /repos/{owner}/{repo}/pulls\nHeaders: {\n  "Authorization": "token {github_token}",\n  "Accept": "application/vnd.github.v3+json"\n}\nBody: {\n  "title": "AI Code Changes: ...",\n  "body": "Instructions: ...",\n  "head": branch_name,\n  "base": "main"\n}
+    GITHUB --> API: {\n  "id": 123,\n  "html_url": "https://github.com/owner/repo/pull/123",\n  "state": "open"\n}
+else No token provided
+    API -> API: Skip PR creation\n(No .env fallback)
+end
+
+== Logging & Response ==
+API -> DB: log_aider_execution(\n  repo_path, instructions, returncode,\n  stdout, stderr, execution_time\n)
+API -> DB: log_api_metric(\n  endpoint, method, status_code, response_time\n)
+
+API --> UI: {\n  "success": true,\n  "branch_created": "feature/aider-20250908-143022",\n  "changes_applied": true,\n  "push_result": {"success": true},\n  "pr_result": {\n    "success": true,\n    "pr_url": "https://github.com/owner/repo/pull/123"\n  }\n}
+
+UI -> UI: Format results with:\n- Branch information\n- Code changes summary\n- PR link (if created)
+UI --> U: Display success message with details
+
+@enduml

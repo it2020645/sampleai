@@ -1,0 +1,100 @@
+@startuml AI Repository Management System
+!theme blueprint
+title AI Repository Management System - Complete Flow
+
+actor User as U
+participant "Web Interface" as WI
+participant "FastAPI Server" as API
+participant "SQLite Database" as DB
+participant "Git Repository" as GIT
+participant "Aider AI" as AIDER
+participant "GitHub API" as GITHUB
+
+== Repository Management ==
+U -> WI: Enter GitHub URL, Owner, Branch
+WI -> API: POST /repositories
+API -> DB: add_repository()
+DB --> API: repository_id
+API --> WI: Repository created
+WI --> U: Success confirmation
+
+== Load Repositories ==
+U -> WI: Open application
+WI -> API: GET /repositories (with API key)
+API -> DB: get_all_repositories()
+DB --> API: repositories list
+API --> WI: JSON response
+WI --> U: Display repository list
+
+== Code Execution Flow ==
+U -> WI: Select repo, enter instructions
+U -> WI: Optional: Enter GitHub token
+U -> WI: Check "Create branch" & "Create PR"
+WI -> API: POST /update-code-by-id
+note right: Includes instructions, repo_id,\ncreate_branch, github_token, create_pr
+
+API -> DB: get_repository(repo_id)
+DB --> API: repository details
+
+alt Repository not cloned locally
+    API -> GIT: git clone <github_url> <local_path>
+    GIT --> API: Repository cloned
+end
+
+== Branch Creation ==
+alt Create branch enabled
+    API -> GIT: git checkout -b feature/aider-{timestamp}
+    GIT --> API: New branch created
+    API -> GIT: Ensure remote origin set to github_url
+end
+
+== AI Code Processing ==
+API -> AIDER: run aider command with instructions
+AIDER -> GIT: Analyze repository structure
+AIDER -> AIDER: Process AI instructions
+AIDER -> GIT: Apply code changes
+AIDER --> API: Execution results (stdout, stderr)
+
+== Git Operations ==
+alt Push to origin enabled
+    API -> GIT: git add . && git commit -m "AI changes"
+    API -> GIT: git push origin <branch_name>
+    GIT --> API: Push successful
+end
+
+== Pull Request Creation ==
+alt Create PR enabled AND GitHub token provided
+    API -> GITHUB: POST /repos/{owner}/{repo}/pulls
+    note right: Headers: Authorization: token {github_token}\nBody: title, body, head, base
+    GITHUB --> API: PR created response
+    API -> DB: log_request() - store PR details
+else No GitHub token provided
+    API --> WI: Warning: PR creation skipped
+end
+
+== Response & Logging ==
+API -> DB: log_aider_execution()
+API -> DB: log_api_metric()
+API --> WI: Complete execution result
+note right: Includes: success status, branch name,\ncode changes, PR URL (if created)
+WI --> U: Display formatted results
+
+== Error Handling ==
+alt Repository clone fails
+    API -> API: Auto-retry clone
+    alt Still fails
+        API --> WI: Clone instructions for manual setup
+    end
+end
+
+alt Aider execution fails
+    API -> DB: log_aider_execution() with error
+    API --> WI: Error details with troubleshooting
+end
+
+alt GitHub API fails (PR creation)
+    API --> WI: Branch created but PR failed
+    note right: User can create PR manually\nusing provided branch name
+end
+
+@enduml
