@@ -4,7 +4,7 @@
 
 1. **Update Configuration in main.py:**
    ```python
-   API_KEY = "your-super-secure-api-key-here"  # Change this!
+   API_KEY = os.getenv("AIDER_API_KEY", "change_this_to_a_strong_key")  # Load from .env file
    ALLOWED_BASE = Path("C:/Users/batal/OneDrive/Documents/GitHub").resolve()  # Update to your repos folder
    ```
 
