@@ -33,6 +33,7 @@ load_dotenv(override=True)
 
 
 # === CONFIG ===
+HOST_ADDRESS = os.getenv("HOST_ADDRESS", "0.0.0.0")  # Default to 0.0.0.0 if not set
 API_KEY = os.getenv("AIDER_API_KEY", "change_this_to_a_strong_key")  # Load from .env file
 ALLOWED_BASE = Path(os.getenv("ALLOWED_BASE_PATH", "C:/Users/batal/OneDrive/Documents/GitHub/ai")).resolve()
 # Use relative path by default to avoid CORS/Cookie domain issues (localhost vs 127.0.0.1)
@@ -1658,7 +1659,7 @@ if __name__ == "__main__":
     logger.info("🌐 Starting FastAPI server on http://localhost:8080")
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
+        host=HOST_ADDRESS,
         port=8080,
         reload=False
     )
