@@ -4,210 +4,404 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aider Repository Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary: #00a8ff; /* Arc Reactor Blue */
+            --primary-glow: rgba(0, 168, 255, 0.6);
+            --secondary: #d4af37; /* Gold/Bronze */
+            --danger: #ff3333;
+            --success: #00ff9d;
+            --bg-dark: #050505;
+            --bg-panel: rgba(10, 20, 30, 0.85);
+            --text-main: #e0f0ff;
+            --text-muted: #647c90;
+            --border-tech: 1px solid rgba(0, 168, 255, 0.3);
+            --font-tech: 'JetBrains Mono', monospace;
+            --font-ui: 'Inter', sans-serif;
+            --glow-blue: 0 0 10px rgba(0, 168, 255, 0.5);
+            --glow-gold: 0 0 10px rgba(212, 175, 55, 0.5);
+        }
+
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
         }
-        
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a1a;
-            color: #ffffff;
+            background-color: var(--bg-dark);
+            background-image: 
+                linear-gradient(rgba(0, 168, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 168, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            color: var(--text-main);
+            font-family: var(--font-ui);
             min-height: 100vh;
-            padding: 20px;
+            overflow-x: hidden;
         }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: #2d2d2d;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-            overflow: hidden;
-            border: 1px solid #404040;
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
         }
-        
-        .header {
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
+        ::-webkit-scrollbar-track {
+            background: #000;
         }
-        
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 4px;
         }
-        
-        .header p {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
-        
-        .main-content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            padding: 30px;
-        }
-        
-        .card {
-            background: #3a3a3a;
-            border-radius: 10px;
-            padding: 25px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            border: 1px solid #4a4a4a;
-        }
-        
-        .card h2 {
-            color: #ffffff;
-            margin-bottom: 20px;
-            font-size: 1.5em;
-            border-bottom: 2px solid #2a5298;
-            padding-bottom: 10px;
-        }
-        
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #e0e0e0;
-        }
-        
-        .form-group input, .form-group textarea, .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #555555;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-            background: #2a2a2a;
-            color: #ffffff;
-        }
-        
-        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
-            outline: none;
-            border-color: #2a5298;
-            background: #333333;
-        }
-        
-        .form-group input::placeholder, .form-group textarea::placeholder {
-            color: #888888;
-        }
-        
-        .btn {
-            background: linear-gradient(135deg, #2a5298 0%, #1e3c72 100%);
-            color: white;
-            padding: 12px 25px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: all 0.3s;
-            margin-right: 10px;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(42, 82, 152, 0.4);
-        }
-        
-        .btn-secondary {
-            background: linear-gradient(135deg, #666666 0%, #444444 100%);
-            color: #ffffff;
-        }
-        
-        .btn-secondary:hover {
-            box-shadow: 0 5px 15px rgba(102, 102, 102, 0.4);
-        }
-        
-        .btn-danger {
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-        }
-        
-        .btn-danger:hover {
-            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
-        }
-        
-        .repo-list {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        
-        .repo-item {
-            background: #404040;
-            border: 1px solid #555555;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 10px;
-            transition: all 0.3s;
-        }
-        
-        .repo-item:hover {
-            box-shadow: 0 3px 10px rgba(255,255,255,0.1);
-            background: #4a4a4a;
-        }
-        
-        .repo-name {
-            font-weight: 600;
-            color: #ffffff;
-            margin-bottom: 5px;
-        }
-        
-        .repo-url {
-            color: #b0b0b0;
-            font-size: 0.9em;
-            margin-bottom: 10px;
-        }
-        
-        .repo-meta {
+
+        /* Navigation */
+        nav {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 0.8em;
-            color: #cccccc;
+            padding: 20px 50px;
+            background: rgba(5, 10, 15, 0.9);
+            border-bottom: var(--border-tech);
+            box-shadow: 0 0 15px rgba(0, 168, 255, 0.2);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: var(--glow-blue);
+            background: none;
+            -webkit-text-fill-color: var(--primary);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-family: var(--font-tech);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            position: relative;
+            padding: 5px 0;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+            color: var(--primary);
+            text-shadow: 0 0 8px var(--primary-glow);
         }
         
-        .status {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8em;
-            font-weight: 600;
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0%;
+            height: 1px;
+            background: var(--primary);
+            transition: width 0.3s ease;
+            box-shadow: 0 0 5px var(--primary);
         }
         
-        .status.success {
-            background: #d4edda;
-            color: #155724;
+        .nav-links a:hover::after {
+            width: 100%;
         }
         
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        .loading {
+        .admin-only {
             display: none;
-            text-align: center;
+        }
+
+        /* Layout */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .header {
+            margin-bottom: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 20px;
+            position: relative;
+        }
+        
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 100px;
+            height: 3px;
+            background: var(--primary);
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        h1 {
+            font-family: var(--font-tech);
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 10px;
+        }
+
+        h2 {
+            font-family: var(--font-tech);
+            font-size: 1.2rem;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(0, 168, 255, 0.2);
+            padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Cards & Panels */
+        .main-content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 30px;
+        }
+
+        .card {
+            background: var(--bg-panel);
+            border: 1px solid rgba(0, 168, 255, 0.2);
+            padding: 25px;
+            position: relative;
+            backdrop-filter: blur(5px);
+            /* Tech corners */
+            clip-path: polygon(
+                0 0, 
+                100% 0, 
+                100% calc(100% - 20px), 
+                calc(100% - 20px) 100%, 
+                0 100%
+            );
+        }
+        
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary), transparent);
+            opacity: 0.5;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--primary);
+            font-family: var(--font-tech);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 168, 255, 0.3);
+            color: #fff;
+            padding: 12px 15px;
+            font-family: var(--font-tech);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 15px rgba(0, 168, 255, 0.2);
+            background: rgba(0, 168, 255, 0.05);
+        }
+
+        /* Buttons */
+        .btn {
+            background: transparent;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            padding: 10px 20px;
+            font-family: var(--font-tech);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+        }
+
+        .btn:hover {
+            background: var(--primary);
+            color: #000;
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+
+        .btn-secondary {
+            border-color: var(--text-muted);
+            color: var(--text-muted);
+        }
+
+        .btn-secondary:hover {
+            background: var(--text-muted);
+            color: #000;
+            box-shadow: 0 0 15px rgba(160, 160, 176, 0.5);
+        }
+        
+        .btn-danger {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+        
+        .btn-danger:hover {
+            background: var(--danger);
+            color: #fff;
+            box-shadow: 0 0 15px rgba(255, 51, 51, 0.5);
+        }
+
+        /* Repo List */
+        .repo-list {
+            max-height: 500px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .repo-item {
+            background: rgba(0, 0, 0, 0.2);
+            border-left: 2px solid rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .repo-item:hover {
+            background: rgba(0, 168, 255, 0.05);
+            border-left-color: var(--primary);
+            box-shadow: inset 10px 0 20px -10px rgba(0, 168, 255, 0.2);
+        }
+
+        .repo-name {
+            font-family: var(--font-tech);
+            font-weight: bold;
+            color: #fff;
+            font-size: 1.1rem;
+        }
+        
+        .repo-url {
+            color: var(--text-muted);
+            font-size: 0.85em;
+            margin-bottom: 12px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .repo-meta {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            border: 1px solid currentColor;
+            margin-left: 10px;
+            font-family: var(--font-tech);
+        }
+        
+        .status-success { color: var(--success); box-shadow: 0 0 5px rgba(0, 255, 157, 0.3); }
+        .status-error { color: var(--danger); box-shadow: 0 0 5px rgba(255, 51, 51, 0.3); }
+        .status-pending { color: var(--secondary); box-shadow: 0 0 5px rgba(212, 175, 55, 0.3); }
+
+        /* Execution Area */
+        .execute-section {
+            background: var(--bg-panel);
+            border: 1px solid rgba(0, 168, 255, 0.2);
+            padding: 30px;
+            margin-top: 30px;
+            position: relative;
+        }
+        
+        /* Corner accents for execution section */
+        .execute-section::before, .execute-section::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--primary);
+            transition: all 0.3s ease;
+        }
+        
+        .execute-section::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+        .execute-section::after { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+        #result-content {
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid var(--text-muted);
+            color: var(--success);
+            font-family: var(--font-tech);
             padding: 20px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            position: relative;
+            min-height: 100px;
         }
         
+        #result-content::before {
+            content: 'TERMINAL OUTPUT';
+            position: absolute;
+            top: -10px;
+            left: 10px;
+            background: var(--bg-dark);
+            padding: 0 10px;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-family: var(--font-tech);
+        }
+
         .spinner {
-            border: 4px solid #444444;
-            border-top: 4px solid #2a5298;
+            border: 2px solid rgba(0, 168, 255, 0.1);
+            border-top: 2px solid var(--primary);
             border-radius: 50%;
-            width: 30px;
-            height: 30px;
+            width: 40px;
+            height: 40px;
             animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
+            margin: 0 auto 15px;
+            box-shadow: 0 0 15px var(--primary-glow);
         }
-        
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -217,30 +411,41 @@
             grid-column: 1 / -1;
         }
         
-        .execute-section {
-            background: #3a3a3a;
-            border-radius: 10px;
-            padding: 25px;
-            margin-top: 20px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            border: 1px solid #4a4a4a;
-        }
-        
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) {
             .main-content {
                 grid-template-columns: 1fr;
-                gap: 20px;
-                padding: 20px;
             }
         }
     </style>
 </head>
 <body>
+    <nav>
+        <a href="/dashboard" class="logo">JARVIS</a>
+        <div class="nav-links">
+            <a href="/dashboard" style="color: var(--primary);">DASHBOARD</a>
+            <a href="/pricing">PRICING</a>
+            <a href="/help">SYSTEM HELP</a>
+            <a href="/bugs.html" id="nav-bugs" class="admin-only">CODE SCAN</a>
+        </div>
+        <div>
+            <button onclick="signOut()" style="padding: 8px 20px; font-size: 0.9rem; background: rgba(255, 0, 85, 0.1); border: 1px solid #ff0055; color: #ff0055; cursor: pointer; font-family: 'JetBrains Mono'; font-weight: bold; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);">DISENGAGE</button>
+        </div>
+    </nav>
+
     <div class="container">
         <div class="header">
-            <h1>🚀 Aider Repository Manager</h1>
-            <p>Manage your GitHub repositories and execute AI-powered code changes</p>
-            <p style="font-size: 0.9em; opacity: 0.8;">Base Path: C:/Users/batal/OneDrive/Documents/GitHub/ai</p>
+            <div class="header-content">
+                <h1>🚀 Repository Manager</h1>
+                <p>Manage your GitHub repositories and execute AI-powered code changes</p>
+                <p style="font-size: 0.85em; color: var(--text-muted); margin-top: 5px;">Base Path: C:/Users/batal/OneDrive/Documents/GitHub/ai</p>
+            </div>
+            <div id="plan-usage" style="text-align: right; display: none; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 15px; border: 1px solid var(--glass-border); min-width: 200px;">
+                <div style="color: var(--text-muted); font-size: 0.9em; margin-bottom: 5px;">Plan: <span id="plan-name" style="color: var(--primary); font-weight: bold; text-transform: uppercase;">Free</span></div>
+                <div style="color: var(--text-muted); font-size: 0.9em;">Usage: <span id="plan-stats" style="color: var(--text-main); font-weight: bold;">0/5</span></div>
+                <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); margin-top: 8px; border-radius: 2px; overflow: hidden;">
+                    <div id="usage-bar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.5s;"></div>
+                </div>
+            </div>
         </div>
         
         <div class="main-content">
@@ -249,19 +454,21 @@
                 <h2>➕ Add Repository</h2>
                 <form id="add-repo-form">
                     <div class="form-group">
-                        <label for="repo-name">Repository Name *</label>
-                        <input type="text" id="repo-name" name="name" required placeholder="my-awesome-project">
-                    </div>
-                    
-                    <div class="form-group">
                         <label for="github-url">GitHub URL *</label>
                         <input type="url" id="github-url" name="github_url" required 
                                placeholder="https://github.com/username/repo">
                     </div>
                     
                     <div class="form-group">
-                        <label for="owner">Owner/Organization *</label>
-                        <input type="text" id="owner" name="owner" required placeholder="username">
+                        <label for="repo-name">Repository Name * (Auto-generated)</label>
+                        <input type="text" id="repo-name" name="name" required placeholder="my-awesome-project"
+                               readonly style="background: rgba(0,0,0,0.2); color: var(--text-muted); cursor: not-allowed;">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="owner">Owner/Organization * (Auto-generated)</label>
+                        <input type="text" id="owner" name="owner" required placeholder="username"
+                               readonly style="background: rgba(0,0,0,0.2); color: var(--text-muted); cursor: not-allowed;">
                     </div>
                     
                     <div class="form-group">
@@ -279,7 +486,7 @@
                         <label for="local-path">Local Path (Auto-generated)</label>
                         <input type="text" id="local-path" name="local_path" readonly
                                placeholder="Will be auto-generated from repo name"
-                               style="background: #1a1a1a; color: #888888; cursor: not-allowed;">
+                               style="background: rgba(0,0,0,0.2); color: var(--text-muted); cursor: not-allowed;">
                     </div>
                     
                     <div class="form-group">
@@ -288,21 +495,24 @@
                                   placeholder="Brief description of the repository..."></textarea>
                     </div>
                     
-                    <button type="submit" class="btn">💾 Add Repository</button>
+                    <button type="submit" class="btn" style="width: 100%">💾 Add Repository</button>
                 </form>
             </div>
             
             <!-- Repository List -->
             <div class="card">
-                <h2>📁 Repositories</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--glass-border); padding-bottom: 15px;">
+                    <h2 style="margin-bottom: 0; border: none; padding: 0;">📁 Repositories</h2>
+                    <button class="btn btn-secondary" onclick="loadRepositories()" style="padding: 8px 15px; font-size: 0.85rem;">🔄 Refresh</button>
+                </div>
+                
                 <div class="loading" id="repos-loading">
                     <div class="spinner"></div>
-                    <p>Loading repositories...</p>
+                    <p style="text-align: center; color: var(--text-muted);">Loading repositories...</p>
                 </div>
                 <div class="repo-list" id="repo-list">
                     <!-- Repositories will be loaded here -->
                 </div>
-                <button class="btn btn-secondary" onclick="loadRepositories()">🔄 Refresh</button>
             </div>
             
             <!-- Execute Code Changes -->
@@ -325,48 +535,114 @@
                     </div>
                     
                     <div class="form-group">
-                        <label style="color: #e0e0e0; display: block; margin-bottom: 10px;">
-                            <input type="checkbox" id="dry-run" name="dry_run" style="margin-right: 8px;"> 
-                            Dry Run (preview changes without applying)
-                        </label>
-                    </div>
-                    
-                    <div class="form-group">
-                        <div style="background: #2a4a2a; border: 1px solid #4a6a4a; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
-                            <small style="color: #a0d0a0;">ℹ️ <strong>Smart Workflow:</strong> Creates branch → Waits for CI/CD success → Creates PR automatically</small>
+                        <div style="background: rgba(0, 255, 157, 0.1); border: 1px solid rgba(0, 255, 157, 0.2); padding: 15px; border-radius: 12px; margin-bottom: 20px;">
+                            <small style="color: var(--success); display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 1.2em">ℹ️</span> 
+                                <strong>Smart AI Workflow:</strong> Creates branch → Makes code changes → Waits for CI/CD to pass → Creates PR automatically
+                            </small>
                         </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="github-token" style="color: #e0e0e0;">GitHub Token (optional - uses repo token if blank):</label>
-                        <input type="password" id="github-token" name="github_token" placeholder="Leave blank to use repository's stored token" style="background: #333; color: #ffffff; border: 1px solid #555555; padding: 8px; border-radius: 4px; width: 100%; margin-top: 5px;">
-                        <small style="color: #b0b0b0; display: block; margin-top: 5px;">Required for creating pull requests. Will use repository's token if left empty.</small>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div class="form-group">
+                            <label for="github-token-exec">GitHub Token (optional)</label>
+                            <input type="password" id="github-token-exec" name="github_token" placeholder="Leave blank to use repository's stored token">
+                            <small style="color: var(--text-muted); display: block; margin-top: 5px; font-size: 0.8em;">Required for creating pull requests. Will use repository's token if left empty.</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="pr-target-branch">Pull Request Target Branch</label>
+                            <input type="text" id="pr-target-branch" name="pr_target_branch" value="master" placeholder="master">
+                            <small style="color: var(--text-muted); display: block; margin-top: 5px; font-size: 0.8em;">PR will be created only after CI/CD passes (waits up to 10 minutes)</small>
+                        </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="pr-target-branch" style="color: #e0e0e0;">Pull Request Target Branch:</label>
-                        <input type="text" id="pr-target-branch" name="pr_target_branch" value="master" placeholder="master" style="background: #333; color: #ffffff; border: 1px solid #555555; padding: 8px; border-radius: 4px; width: 100%; margin-top: 5px;">
-                        <small style="color: #b0b0b0; display: block; margin-top: 5px;">PR created automatically after CI/CD passes (waits up to 10 minutes)</small>
-                    </div>
-                    
-                    <button type="submit" class="btn">⚡ Execute Changes</button>
+                    <button type="submit" class="btn" style="width: 100%; margin-top: 10px;">⚡ Execute Changes</button>
                 </form>
                 
-                <div id="execution-result" style="margin-top: 20px; display: none;">
-                    <h3 style="color: #ffffff;">Execution Result:</h3>
-                    <pre id="result-content" style="background: #2a2a2a; color: #ffffff; padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid #555555;"></pre>
+                <div id="execution-result" style="margin-top: 30px; display: none;">
+                    <h3 style="color: var(--text-main); margin-bottom: 15px;">Execution Result:</h3>
+                    <pre id="result-content"></pre>
                 </div>
             </div>
         </div>
     </div>
 
+    <script src="/static/config.js?v=2"></script>
     <script>
-        const API_BASE = 'http://localhost:8000';
-        const API_KEY = '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'; // Load from server config
+        // Force API_BASE to be relative if it's localhost:8000 (fix for caching issues)
+        if (window.API_BASE === 'http://localhost:8000') {
+            console.log('🔄 Overriding cached API_BASE to relative path');
+            window.API_BASE = '';
+        }
+        
+        // Get API base from window config or default to relative path (empty string)
+        // This ensures cookies work correctly regardless of localhost vs 127.0.0.1
+        const API_BASE = window.API_BASE || '';
+        // API_KEY removed - using secure backend authentication instead
+        
+        let currentUserEmail = null;
+        const ADMIN_EMAILS = ["novusmundus2025@gmail.com", "batalladavid1984@gmail.com"];
+
+        // Check if user is authenticated before loading content
+        async function checkAuthAndLoad() {
+            try {
+                console.log('Checking authentication...', {API_BASE});
+                const response = await fetch(`${API_BASE}/auth/me`, {
+                    credentials: 'include'
+                });
+                
+                console.log('Auth response:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    // Not authenticated, redirect to login
+                    console.log('Not authenticated, redirecting to login');
+                    const text = await response.text();
+                    console.error('Auth failed details:', text);
+                    // Add a small delay to see logs if needed
+                    window.location.href = '/login.html';
+                    return;
+                }
+                
+                const data = await response.json();
+                console.log('User authenticated:', data);
+                currentUserEmail = data.user.email;
+                
+                // Show admin links
+                if (ADMIN_EMAILS.includes(currentUserEmail)) {
+                    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+                }
+                if (data.plan) {
+                    const planUsage = document.getElementById('plan-usage');
+                    const planName = document.getElementById('plan-name');
+                    const planStats = document.getElementById('plan-stats');
+                    const usageBar = document.getElementById('usage-bar');
+                    
+                    planUsage.style.display = 'block';
+                    planName.textContent = data.plan.type;
+                    planStats.textContent = `${data.plan.usage} / ${data.plan.limit}`;
+                    
+                    const percentage = Math.min(100, (data.plan.usage / data.plan.limit) * 100);
+                    usageBar.style.width = `${percentage}%`;
+                    
+                    if (percentage >= 90) {
+                        usageBar.style.background = 'var(--danger)';
+                    } else if (percentage >= 75) {
+                        usageBar.style.background = '#ffaa00';
+                    }
+                }
+
+                // User is authenticated, load repositories
+                loadRepositories();
+            } catch (error) {
+                console.error('Error checking authentication:', error);
+                window.location.href = '/login.html';
+            }
+        }
         
         // Load repositories on page load
         document.addEventListener('DOMContentLoaded', function() {
-            loadRepositories();
+            checkAuthAndLoad();
         });
         
         // Add repository form submission
@@ -380,9 +656,9 @@
                 const response = await fetch(`${API_BASE}/repositories`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${API_KEY}`
+                        'Content-Type': 'application/json'
                     },
+                    credentials: 'include',
                     body: JSON.stringify(repoData)
                 });
                 
@@ -423,9 +699,9 @@
                 const response = await fetch(`${API_BASE}/update-code-by-id`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${API_KEY}`
+                        'Content-Type': 'application/json'
                     },
+                    credentials: 'include',
                     body: JSON.stringify(executeData)
                 });
                 
@@ -525,9 +801,7 @@
             try {
                 const response = await fetch(`${API_BASE}/repositories/${repoId}/clone`, {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${API_KEY}`
-                    }
+                    credentials: 'include'
                 });
                 
                 const result = await response.json();
@@ -585,9 +859,7 @@
             
             try {
                 const response = await fetch(`${API_BASE}/repositories`, {
-                    headers: {
-                        'Authorization': `Bearer ${API_KEY}`
-                    }
+                    credentials: 'include'
                 });
                 
                 if (response.ok) {
@@ -622,6 +894,11 @@
         function createRepoItem(repo) {
             const div = document.createElement('div');
             div.className = 'repo-item';
+            
+            const securityBtn = ADMIN_EMAILS.includes(currentUserEmail) 
+                ? `<a href="vulnerabilities.html?repo_id=${repo.id}" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px; text-decoration: none; margin-right: 5px; font-family: 'JetBrains Mono'; clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);">🛡️ SCAN</a>`
+                : '';
+
             div.innerHTML = `
                 <div class="repo-name">${repo.name}</div>
                 <div class="repo-url">${repo.github_url}</div>
@@ -629,8 +906,9 @@
                 <div class="repo-meta">
                     <span>Owner: ${repo.owner} | Branch: ${repo.branch}</span>
                     <div>
-                        <button class="btn btn-secondary" onclick="editRepo(${repo.id})" style="padding: 4px 8px; font-size: 12px;">✏️ Edit</button>
-                        <button class="btn btn-danger" onclick="deleteRepo(${repo.id})" style="padding: 4px 8px; font-size: 12px;">🗑️ Delete</button>
+                        ${securityBtn}
+                        <button class="btn btn-secondary" onclick="editRepo(${repo.id})" style="padding: 4px 8px; font-size: 12px; font-family: 'JetBrains Mono'; clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);">✏️ EDIT</button>
+                        <button class="btn btn-danger" onclick="deleteRepo(${repo.id})" style="padding: 4px 8px; font-size: 12px; font-family: 'JetBrains Mono'; clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);">🗑️ DELETE</button>
                     </div>
                 </div>
             `;
@@ -644,9 +922,7 @@
             try {
                 const response = await fetch(`${API_BASE}/repositories/${repoId}`, {
                     method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${API_KEY}`
-                    }
+                    credentials: 'include'
                 });
                 
                 if (response.ok) {
@@ -681,9 +957,7 @@
         async function checkCIStatus(repoId, branchName) {
             try {
                 const response = await fetch(`${API_BASE}/repositories/${repoId}/ci-status/${branchName}`, {
-                    headers: {
-                        'Authorization': `Bearer ${API_KEY}`
-                    }
+                    credentials: 'include'
                 });
                 
                 if (response.ok) {
@@ -744,6 +1018,20 @@
             }
         }
 
+        // Sign out function
+        async function signOut() {
+            try {
+                await fetch(`${API_BASE}/auth/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                window.location.href = '/';
+            } catch (error) {
+                console.error('Error signing out:', error);
+                window.location.href = '/';
+            }
+        }
+        
         // Show status message
         function showStatus(message, type) {
             // Create a simple toast notification

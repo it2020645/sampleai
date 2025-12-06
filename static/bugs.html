@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Diagnostics - JARVIS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #00a8ff;
+            --secondary: #d4af37;
+            --bg-dark: #050505;
+            --bg-panel: rgba(10, 20, 30, 0.85);
+            --text-main: #e0f0ff;
+            --text-muted: #647c90;
+            --glass-border: rgba(0, 168, 255, 0.3);
+            --success: #00ff9d;
+            --danger: #ff0055;
+            --warning: #ffaa00;
+            --glow-blue: 0 0 10px rgba(0, 168, 255, 0.5);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 20px;
+            background-image: 
+                linear-gradient(rgba(0, 168, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 168, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+        
+        /* HUD Overlay */
+        .hud-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 9999;
+            background: radial-gradient(circle at center, transparent 60%, rgba(0, 0, 0, 0.4) 100%);
+            box-shadow: inset 0 0 50px rgba(0, 168, 255, 0.1);
+        }
+
+        /* Nav */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--glass-border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(5, 5, 10, 0.8);
+            margin: -20px -20px 30px -20px;
+        }
+        .logo {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            text-shadow: var(--glow-blue);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: none;
+            -webkit-text-fill-color: var(--primary);
+        }
+        .nav-links { display: flex; gap: 30px; }
+        .nav-links a { 
+            color: var(--text-muted); text-decoration: none; transition: all 0.3s;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .nav-links a:hover { color: var(--primary); text-shadow: var(--glow-blue); }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+        
+        .card {
+            background: var(--bg-panel);
+            border: 1px solid var(--glass-border);
+            padding: 25px;
+            margin-bottom: 20px;
+            border-radius: 0;
+            clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        }
+
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid var(--glass-border); }
+        th { 
+            color: var(--primary); font-weight: 700; 
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        td { font-family: 'Inter', sans-serif; }
+        
+        .status-badge {
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            border-radius: 0;
+            clip-path: polygon(5px 0, 100% 0, 100% 100%, 0 100%);
+        }
+        .status-open { background: rgba(255, 0, 85, 0.1); color: var(--danger); border: 1px solid var(--danger); }
+        .status-resolved { background: rgba(0, 255, 157, 0.1); color: var(--success); border: 1px solid var(--success); }
+        .status-in_progress { background: rgba(255, 170, 0, 0.1); color: var(--warning); border: 1px solid var(--warning); }
+
+        .code-block {
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border: 1px solid var(--glass-border);
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            color: #a0c0d0;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 50px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            border: 1px solid var(--glass-border);
+            background: rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="hud-overlay"></div>
+    <nav>
+        <a href="/dashboard" class="logo">JARVIS</a>
+        <div class="nav-links">
+            <a href="/dashboard">DASHBOARD</a>
+            <a href="/pricing">PRICING</a>
+            <a href="/help">SYSTEM HELP</a>
+            <a href="/bugs.html" style="color: var(--primary)">CODE SCAN</a>
+        </div>
+        <div>
+            <button onclick="signOut()" style="padding: 8px 20px; font-size: 0.9rem; background: rgba(255, 0, 85, 0.1); border: 1px solid #ff0055; color: #ff0055; cursor: pointer; font-family: 'JetBrains Mono'; font-weight: bold; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);">DISENGAGE</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <h1 style="font-family: 'JetBrains Mono'; color: var(--primary); text-transform: uppercase; letter-spacing: 2px; text-shadow: var(--glow-blue);">System Anomalies</h1>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="loadBugs('open')" class="status-badge status-open" style="cursor: pointer;">ACTIVE</button>
+                <button onclick="loadBugs('in_progress')" class="status-badge status-in_progress" style="cursor: pointer;">PROCESSING</button>
+                <button onclick="loadBugs('resolved')" class="status-badge status-resolved" style="cursor: pointer;">RESOLVED</button>
+                <button onclick="loadBugs()" class="status-badge" style="border: 1px solid var(--text-muted); background: transparent; color: var(--text-muted); cursor: pointer;">ALL LOGS</button>
+            </div>
+        </div>
+
+        <div id="bugs-list">
+            <!-- Bugs will be loaded here -->
+            <div style="text-align: center; padding: 50px; color: var(--text-muted);">Loading...</div>
+        </div>
+    </div>
+
+    <script src="/static/config.js"></script>
+    <script>
+        const ADMIN_EMAILS = ["novusmundus2025@gmail.com", "batalladavid1984@gmail.com"];
+
+        // Check Admin Access
+        async function checkAccess() {
+            try {
+                // Wait for config to load if needed
+                if (window.API_BASE === undefined) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                const apiBase = window.API_BASE || '';
+
+                const response = await fetch(`${apiBase}/auth/me`, {
+                    credentials: 'include'
+                });
+                if (!response.ok) throw new Error('Auth check failed');
+                
+                const data = await response.json();
+                const email = data.user.email;
+                
+                if (!ADMIN_EMAILS.includes(email)) {
+                    document.body.innerHTML = `
+                        <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;gap:20px;background:var(--bg-dark);color:var(--text-main);">
+                            <h1 style="color:var(--danger);font-family:'JetBrains Mono';text-transform:uppercase;letter-spacing:2px;">ACCESS DENIED</h1>
+                            <p style="font-family:'Inter';color:var(--text-muted);">Clearance level insufficient for this protocol.</p>
+                            <a href="/dashboard" class="btn" style="background:var(--primary);color:#000;text-decoration:none;border:none;padding:10px 20px;font-family:'JetBrains Mono';font-weight:bold;clip-path:polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);">RETURN TO DASHBOARD</a>
+                        </div>
+                    `;
+                    return false;
+                }
+                return true;
+            } catch (error) {
+                console.error(error);
+                window.location.href = '/login.html';
+                return false;
+            }
+        }
+
+        async function signOut() {
+            const apiBase = window.API_BASE || '';
+            try {
+                await fetch(`${apiBase}/auth/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                window.location.href = '/login.html';
+            } catch (error) {
+                console.error('Error signing out:', error);
+                window.location.href = '/login.html';
+            }
+        }
+
+        async function loadBugs(status = null) {
+            if (!await checkAccess()) return;
+            const apiBase = window.API_BASE || '';
+
+            const container = document.getElementById('bugs-list');
+            container.innerHTML = '<div class="empty-state">INITIALIZING DIAGNOSTIC SCAN...</div>';
+            
+            try {
+                let url = `${apiBase}/api/bugs`;
+                if (status) {
+                    url += `?status=${status}`;
+                }
+                
+                const response = await fetch(url, {
+                    credentials: 'include'
+                });
+                const bugs = await response.json();
+                
+                if (bugs.length === 0) {
+                    container.innerHTML = '<div class="empty-state">NO ANOMALIES DETECTED IN SYSTEM LOGS</div>';
+                    return;
+                }
+                
+                container.innerHTML = bugs.map(bug => `
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 15px; align-items: center;">
+                            <h3 style="color: var(--danger); font-family: 'JetBrains Mono'; text-transform: uppercase;">${bug.error_type}</h3>
+                            <span class="status-badge status-${bug.status}">${bug.status.replace('_', ' ').toUpperCase()}</span>
+                        </div>
+                        <p style="margin-bottom: 10px; color: var(--text-muted); font-family: 'JetBrains Mono'; font-size: 0.9rem;">ENDPOINT: <span style="color: var(--primary)">${bug.endpoint}</span></p>
+                        <p style="margin-bottom: 15px; border-left: 2px solid var(--danger); padding-left: 10px;">${bug.error_message}</p>
+                        
+                        <div class="code-block">${bug.stack_trace}</div>
+                        
+                        <div style="margin-top: 15px; font-size: 0.85rem; color: var(--text-muted); display: flex; justify-content: space-between; font-family: 'JetBrains Mono';">
+                            <span>ID: ${bug.id}</span>
+                            <span>${new Date(bug.created_at).toLocaleString()}</span>
+                        </div>
+                    </div>
+                `).join('');
+                
+            } catch (error) {
+                container.innerHTML = `<div class="empty-state" style="color: var(--danger); border-color: var(--danger);">DIAGNOSTIC ERROR: ${error.message}</div>`;
+            }
+        }
+        
+        // Load all bugs initially
+        loadBugs();
+    </script>
+</body>
+</html>

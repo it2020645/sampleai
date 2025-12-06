@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aider AI - Autonomous Code Management</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #00a8ff;
+            --secondary: #d4af37;
+            --bg-dark: #050505;
+            --bg-panel: rgba(10, 20, 30, 0.85);
+            --text-main: #e0f0ff;
+            --text-muted: #647c90;
+            --border-tech: 1px solid rgba(0, 168, 255, 0.3);
+            --glow-blue: 0 0 10px rgba(0, 168, 255, 0.5);
+            --glow-gold: 0 0 10px rgba(212, 175, 55, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            background-image: 
+                linear-gradient(rgba(0, 168, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 168, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            color: var(--text-main);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* HUD Overlay */
+        .hud-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 9999;
+            background: radial-gradient(circle at center, transparent 60%, rgba(0, 0, 0, 0.4) 100%);
+            box-shadow: inset 0 0 50px rgba(0, 168, 255, 0.1);
+        }
+
+        /* Background Effects */
+        .bg-glow {
+            position: fixed;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(0, 168, 255, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+            top: -200px;
+            left: -200px;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .bg-glow-2 {
+            position: fixed;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(212, 175, 55, 0.05) 0%, rgba(0, 0, 0, 0) 70%);
+            bottom: -100px;
+            right: -100px;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* Navigation */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            backdrop-filter: blur(10px);
+            border-bottom: var(--border-tech);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(5, 5, 10, 0.8);
+        }
+
+        .logo {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: var(--glow-blue);
+            background: none;
+            -webkit-text-fill-color: var(--primary);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+            text-shadow: var(--glow-blue);
+        }
+
+        .btn-nav {
+            padding: 8px 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s;
+            border-radius: 0;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+        }
+
+        .btn-login {
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            margin-right: 10px;
+            background: rgba(0, 168, 255, 0.05);
+        }
+
+        .btn-login:hover {
+            background: rgba(0, 168, 255, 0.15);
+            box-shadow: var(--glow-blue);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #000;
+            border: none;
+            font-weight: bold;
+        }
+
+        .btn-primary:hover {
+            background: #33bfff;
+            box-shadow: var(--glow-blue);
+            transform: none;
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 100px 20px;
+            text-align: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            position: relative;
+        }
+        
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            height: 600px;
+            border: 1px solid rgba(0, 168, 255, 0.1);
+            border-radius: 50%;
+            z-index: -1;
+            animation: pulse 4s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.1; }
+            50% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
+            100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.1; }
+        }
+
+        .hero h1 {
+            font-family: var(--font-tech);
+            font-size: 4rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            line-height: 1.1;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #fff;
+        }
+
+        .hero h1 span {
+            color: var(--primary);
+            text-shadow: 0 0 20px var(--primary-glow);
+            display: block;
+            font-size: 0.8em;
+            margin-top: 10px;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 700px;
+            margin: 0 auto 40px;
+            font-family: var(--font-ui);
+        }
+
+        .cta-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .btn-lg {
+            padding: 15px 40px;
+            font-size: 1rem;
+        }
+
+        /* Features Grid */
+        .features {
+            padding: 80px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .feature-card {
+            background: var(--bg-panel);
+            border: 1px solid rgba(0, 168, 255, 0.2);
+            padding: 30px;
+            position: relative;
+            transition: all 0.3s ease;
+            /* Tech corners */
+            clip-path: polygon(
+                0 0, 
+                100% 0, 
+                100% calc(100% - 20px), 
+                calc(100% - 20px) 100%, 
+                0 100%
+            );
+        }
+        
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 40px;
+            height: 2px;
+            background: var(--primary);
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+            box-shadow: 0 10px 30px rgba(0, 168, 255, 0.1);
+        }
+        
+        .feature-card:hover::before {
+            width: 100%;
+            transition: width 0.5s ease;
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            color: var(--primary);
+            text-shadow: 0 0 10px var(--primary-glow);
+        }
+
+        .feature-card h3 {
+            margin-bottom: 10px;
+            font-size: 1.3rem;
+            font-family: var(--font-tech);
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .feature-card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid rgba(0, 168, 255, 0.2);
+            padding: 50px 20px;
+            text-align: center;
+            color: var(--text-muted);
+            margin-top: 50px;
+            background: rgba(5, 10, 15, 0.9);
+            position: relative;
+        }
+        
+        footer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 2px;
+            background: var(--primary);
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 20px;
+        }
+
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-family: var(--font-tech);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary);
+            text-shadow: 0 0 5px var(--primary-glow);
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.5rem; }
+            nav { padding: 20px; flex-direction: column; gap: 20px; }
+            .nav-links { display: none; } /* Simple mobile hide for now */
+        }
+    </style>
+</head>
+<body>
+    <div class="hud-overlay"></div>
+    <div class="bg-glow"></div>
+    <div class="bg-glow-2"></div>
+
+    <nav>
+        <a href="/" class="logo">JARVIS</a>
+        <div class="nav-links">
+            <a href="/" style="color: var(--primary);">HOME</a>
+            <a href="/pricing">PRICING</a>
+            <a href="/help">SYSTEM HELP</a>
+        </div>
+        <div id="auth-buttons">
+            <a href="/login.html" class="btn-nav btn-login">LOGIN</a>
+            <a href="/login.html" class="btn-nav btn-primary">INITIATE</a>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <h1>Autonomous Code <br><span>Management & Evolution</span></h1>
+        <p>Empower your development workflow with AI agents that write code, manage repositories, and automate pull requests. The future of DevOps is here.</p>
+        <div class="cta-buttons" id="hero-cta">
+            <a href="/login.html" class="btn-nav btn-primary btn-lg">INITIATE PROTOCOL</a>
+            <a href="/pricing" class="btn-nav btn-login btn-lg">VIEW ACCESS LEVELS</a>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <h3>AI-Powered Coding</h3>
+            <p>Give instructions in plain English. Our agents write, debug, and refactor code across your entire repository instantly.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>Automated PRs</h3>
+            <p>Seamlessly integrate with GitHub. Agents create branches, commit changes, and open Pull Requests automatically.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <h3>Secure & Private</h3>
+            <p>Enterprise-grade security with local execution options. Your code stays yours, with full control over access.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔄</div>
+            <h3>CI/CD Integration</h3>
+            <p>Built-in awareness of your CI pipelines. Agents wait for tests to pass before requesting reviews.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <h3>Insightful Metrics</h3>
+            <p>Track agent performance, token usage, and success rates with detailed dashboards and logs.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🌐</div>
+            <h3>Multi-Repo Support</h3>
+            <p>Manage dozens of repositories from a single unified interface. Switch contexts instantly.</p>
+        </div>
+    </section>
+
+    <footer>
+        <div class="footer-links">
+            <a href="/">Home</a>
+            <a href="/pricing">Pricing</a>
+            <a href="/help">Help & FAQ</a>
+            <a href="#">Terms</a>
+            <a href="#">Privacy</a>
+        </div>
+        <p>&copy; 2025 Aider AI Manager. All rights reserved.</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                console.log('Checking auth status...');
+                const response = await fetch('/auth/me', { credentials: 'include' });
+                console.log('Auth response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('User logged in:', data.user.email);
+                    
+                    // Update Nav Buttons
+                    const authButtons = document.getElementById('auth-buttons');
+                    if (authButtons) {
+                        authButtons.innerHTML = `
+                            <a href="/dashboard" class="btn-nav btn-primary">Dashboard</a>
+                            <a href="#" onclick="logout()" class="btn-nav btn-login">Sign Out</a>
+                        `;
+                    }
+
+                    // Update Hero CTA Buttons
+                    const heroCta = document.getElementById('hero-cta');
+                    if (heroCta) {
+                        heroCta.innerHTML = `
+                            <a href="/dashboard" class="btn-nav btn-primary btn-lg">Go to Dashboard</a>
+                            <a href="/pricing" class="btn-nav btn-login btn-lg">View Plans</a>
+                        `;
+                    }
+                } else {
+                    console.log('User not logged in');
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+            }
+        });
+
+        async function logout() {
+            try {
+                await fetch('/auth/logout', { method: 'POST' });
+                window.location.reload();
+            } catch (error) {
+                console.error('Logout failed:', error);
+            }
+        }
+    </script>
+</body>
+</html>
