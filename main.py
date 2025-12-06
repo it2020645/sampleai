@@ -1,16 +1,11 @@
 # server.py
-from fastapi import FastAPI, Request, HTTPException, Header
+from fastapi import FastAPI, Request, HTTPException, Header, Depends
 import sys
-from tqdm import tqdm
+import asyncio
+from datetime import datetime
 
-# Ensure stdout uses UTF-8 encoding if possible (Python 3.7+)
-try:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding='utf-8')
-except Exception:
-    pass
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN
 from pydantic import BaseModel
 import subprocess
@@ -19,23 +14,38 @@ import os
 from pathlib import Path
 import logging
 import uvicorn
-from typing import Optional
+from typing import Optional, List, Dict
 import time
-from database import LightDatabase
+from threading import Thread
+from database import RDBMS
 from dotenv import load_dotenv
 import sys
-
+from models import Base  # Make sure you have models.py with Base and your ORM models
+from database import engine  # Your SQLAlchemy engine from database.py
+from auth import get_current_user
+from auth_routes import router as auth_router
+from security_scanner import SecurityScanner
+import traceback
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(override=True)
 
 # Reconfigure stdout to use UTF-8 encoding
 
 
 # === CONFIG ===
+HOST_ADDRESS = os.getenv("HOST_ADDRESS", "0.0.0.0")  # Default to 0.0.0.0 if not set
 API_KEY = os.getenv("AIDER_API_KEY", "change_this_to_a_strong_key")  # Load from .env file
 ALLOWED_BASE = Path(os.getenv("ALLOWED_BASE_PATH", "C:/Users/batal/OneDrive/Documents/GitHub/ai")).resolve()
+# Use relative path by default to avoid CORS/Cookie domain issues (localhost vs 127.0.0.1)
+# Force empty string to ensure relative paths are used
+API_BASE_URL = "" 
+print(f"DEBUG: API_BASE_URL set to: '{API_BASE_URL}'")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")  # development, staging, production
 AIDER_CMD = "aider"  # assume aider is on PATH (or provide full path)
 TIMEOUT_SECONDS = int(os.getenv("AIDER_TIMEOUT_SECONDS", "300"))  # max seconds to let aider run
+
+# Admin Users
+ADMIN_EMAILS = ["novusmundus2025@gmail.com", "batalladavid1984@gmail.com"]
 
 # Git Branch Management
 AUTO_CREATE_BRANCH = os.getenv("AUTO_CREATE_BRANCH", "false").lower() == "true"
@@ -53,6 +63,13 @@ CI_WAIT_TIMEOUT_MINUTES = int(os.getenv("CI_WAIT_TIMEOUT_MINUTES", "2"))  # Redu
 CHECK_RUNNING_WORKFLOWS = os.getenv("CHECK_RUNNING_WORKFLOWS", "true").lower() == "true"
 WORKFLOW_WAIT_TIMEOUT_MINUTES = int(os.getenv("WORKFLOW_WAIT_TIMEOUT_MINUTES", "5"))  # Wait up to 5 minutes for workflows
 
+# Plan Limits
+PLAN_LIMITS = {
+    'free': 5,
+    'pro': 25,
+    'enterprise': 1000
+}
+
 # === ENDPOINTS ===
 ENDPOINT_UPDATE_CODE = "/update-code"
 ENDPOINT_UPDATE_CODE_BY_ID = "/update-code-by-id"
@@ -69,13 +86,35 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("aider_server")
 
 # === Database ===
-db = LightDatabase()
+db = RDBMS()
+db.init_db() 
+
 
 # Ensure the base directory exists
 ALLOWED_BASE.mkdir(parents=True, exist_ok=True)
 print(f"Base directory ensured: {ALLOWED_BASE}")
 
 app = FastAPI(title="Aider Wrapper API")
+
+# Add CORS middleware for cookie support
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8000", 
+        "http://127.0.0.1:8000", 
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080"
+    ],  # Adjust for production
+    allow_credentials=True,  # Essential for cookies
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include auth router
+app.include_router(auth_router)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -101,30 +140,91 @@ class RepositoryRequest(BaseModel):
     local_path: Optional[str] = None
     description: Optional[str] = None
 
+def generate_semantic_name(instructions: str, max_length: int = 50) -> str:
+    """
+    Generate a semantic name from instructions by extracting key action words.
+    Examples:
+    - "Add a new function to calculate fibonacci" -> "add-fibonacci-function"
+    - "Fix bug in authentication handler" -> "fix-authentication-handler"
+    - "Refactor database connection logic" -> "refactor-database-connection"
+    """
+    import re
+    
+    if not instructions or not instructions.strip():
+        return "update"
+    
+    # Remove special characters and normalize whitespace
+    sanitized = re.sub(r'[^a-zA-Z0-9\s]', '', instructions.strip())
+    words = sanitized.split()
+    
+    # Find action verbs (common first words)
+    action_verbs = {'add', 'create', 'update', 'modify', 'fix', 'refactor', 'optimize', 
+                    'improve', 'implement', 'remove', 'delete', 'enhance', 'rewrite'}
+    
+    # Get first action word
+    first_action = None
+    action_idx = 0
+    for i, word in enumerate(words):
+        if word.lower() in action_verbs:
+            first_action = word.lower()
+            action_idx = i
+            break
+    
+    if not first_action:
+        first_action = "update"
+        action_idx = 0
+    
+    # Get 2-3 most meaningful words after the action
+    remaining_words = words[action_idx + 1:action_idx + 4]
+    meaningful_words = [w for w in remaining_words if len(w) > 2][:2]
+    
+    # Combine to create semantic name
+    name_parts = [first_action] + meaningful_words
+    semantic_name = '-'.join(name_parts).lower()[:max_length]
+    
+    return semantic_name
+
+def ensure_repo_initialized(repo_path: Path):
+    """Ensure the repository has at least one commit."""
+    try:
+        # Check if there are any commits
+        subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(repo_path),
+            check=True,
+            capture_output=True
+        )
+    except subprocess.CalledProcessError:
+        # No commits, initialize
+        print(f"Initializing empty repository at {repo_path}")
+        readme_path = repo_path / "README.md"
+        if not readme_path.exists():
+            readme_path.write_text("# Initial Commit\n\nCreated by Aider Manager.")
+        
+        subprocess.run(["git", "add", "."], cwd=str(repo_path), check=True)
+        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=str(repo_path), check=True)
+        # Rename branch to master if it's not already
+        subprocess.run(["git", "branch", "-M", "master"], cwd=str(repo_path), check=True)
+
 def create_branch_for_changes(repo_path: Path, instructions: str) -> str:
     """
-    Create a new git branch for the changes with a descriptive name.
+    Create a new git branch for the changes with a descriptive semantic name.
     Always creates a feature branch with intelligent naming:
-    - If instructions provided: feature/{short-word-from-instructions}-{timestamp}
-    - If instructions blank: feature/{YYYY-MM-DD}-{timestamp}
+    - If instructions provided: feature/{semantic-name-from-instructions}-{timestamp}
+    - If instructions blank: feature/{update}-{timestamp}
     Returns the branch name created.
     """
     import datetime
-    import re
     import time
+    
+    # Ensure repo is initialized
+    ensure_repo_initialized(repo_path)
     
     # Generate unique timestamp suffix
     timestamp = int(time.time())
     
-    # Generate branch name based on instructions
-    if instructions and instructions.strip():
-        # Extract first meaningful word from instructions (sanitized)
-        sanitized_instructions = re.sub(r'[^a-zA-Z0-9\s]', '', instructions.strip())
-        words = [word for word in sanitized_instructions.split() if len(word) > 2]  # Filter short words
-        branch_suffix = words[0].lower() if words else "change"
-    else:
-        # If blank instructions, use date format
-        branch_suffix = datetime.datetime.now().strftime("%Y-%m-%d")
+    # Generate semantic branch name based on instructions
+    branch_suffix = generate_semantic_name(instructions)
     
     branch_name = f"feature/{branch_suffix}-{timestamp}"
     
@@ -442,10 +542,16 @@ def create_pull_request(github_url: str, branch_name: str, instructions: str, ba
         }
 
         # Generate PR title and body from instructions
-        title = f"AI Code Changes: {instructions[:60]}{'...' if len(instructions) > 60 else ''}"
+        semantic_summary = generate_semantic_name(instructions, max_length=60)
+        # Create a more natural title using first 80 chars of instructions
+        summary = instructions[:80].rstrip('.,!?;:') + ('...' if len(instructions) > 80 else '')
+        title = f"[AI] {semantic_summary.replace('-', ' ').title()}"
+        
         body = f"""## AI-Generated Code Changes
 
-**Instructions:** {instructions}
+**Summary:** {summary}
+
+**Full Instructions:** {instructions}
 
 **Branch:** `{branch_name}`
 **Generated by:** Aider AI Assistant
@@ -543,6 +649,14 @@ def validate_and_resolve_repo(repo_path: str) -> Path:
         logger.warning("Repo path does not contain .git - continuing anyway.")
     return p
 
+def extract_filenames_from_instructions(instructions: str) -> List[str]:
+    """
+    Extract filenames from instructions using a regex for common file patterns.
+    """
+    import re
+    # Match filenames like package.json, app.js, index.js, *.py, *.ts, *.md, etc.
+    return re.findall(r'\b[\w\-]+\.(?:json|js|ts|py|md|yml|yaml|txt|html|css)\b', instructions)
+
 def run_aider(repo_path: Path, instructions: str, dry_run: bool=False, repo_id: Optional[int] = None, github_url: Optional[str] = None, github_token: Optional[str] = None, pr_target_branch: str = "master"):
     print(f"run_aider: repo_path={repo_path}, instructions={instructions}, dry_run={dry_run}, repo_id={repo_id}, github_url={github_url}, github_token={'set' if github_token else 'unset'}, pr_target_branch={pr_target_branch}")
     print("run_aider: Starting code change process...")
@@ -553,10 +667,11 @@ def run_aider(repo_path: Path, instructions: str, dry_run: bool=False, repo_id: 
     """
     print(f"run_aider called with pr_target_branch={pr_target_branch}")
     start_time = time.time()
-    cmd = [AIDER_CMD, "--yes-always", "--auto-commits", "--no-pretty", "--no-stream"]
+    cmd = [AIDER_CMD, ".", "--yes-always", "--auto-commits", "--no-pretty", "--no-stream"]
 
     # Add OpenAI API key in the correct format for Aider
     openai_key = os.getenv("OPENAI_API_KEY")
+    print(f"DEBUG: OPENAI_API_KEY first 20 chars: {openai_key[:20] if openai_key else 'NOT FOUND'}")
     if openai_key:
         cmd.extend(["--api-key", f"openai={openai_key}"])
         print("Added OpenAI API key to Aider command")
@@ -578,6 +693,16 @@ def run_aider(repo_path: Path, instructions: str, dry_run: bool=False, repo_id: 
     else:
         print("run_aider: Dry run mode, skipping branch creation.")
 
+    # Example: parse instructions for file deletion keywords
+    files_to_delete = []
+    if "delete" in instructions.lower() or "remove" in instructions.lower():
+        files_to_delete = extract_filenames_from_instructions(instructions)
+        if files_to_delete:
+            print(f"Deleting files before running Aider: {files_to_delete}")
+            manage_files(repo_path, files_to_delete)
+            # Stage and commit deletions
+            subprocess.run(["git", "add", "-A"], cwd=str(repo_path), check=True)
+            subprocess.run(["git", "commit", "-m", f"Delete files: {', '.join(files_to_delete)}"], cwd=str(repo_path), check=True)
     # If aider has a dry-run flag, you could pass it based on `dry_run` here.
     if dry_run:
         print("Dry run mode - would execute aider but not making actual changes")
@@ -678,7 +803,7 @@ This file was created because aider was not available.
     if success:
         print("run_aider: Code change succeeded.")
     else:
-        print(f"Failed to set up remote origin for {github_url}")
+        print(f"run_aider: Code change failed. Return code: {proc.returncode}")
 
     if success and created_branch:
         print(f"run_aider: Attempting to push branch {created_branch} to remote (forced push)")
@@ -725,7 +850,7 @@ This file was created because aider was not available.
             print(f"Failed to push branch {created_branch} to remote. Error: {push_result.get('error')}")
         print(f"run_aider: Push result details: {push_result}")
         # Wait for CI/CD success before creating PR (if enabled)
-        if push_result.get("success") and github_token and github_url:
+        if push_result.get("success") and github_token and github_url and CREATE_PULL_REQUEST:
             ci_success = True
             if WAIT_FOR_CI:
                 print(f"Waiting for CI/CD to complete on branch {created_branch}")
@@ -768,12 +893,96 @@ This file was created because aider was not available.
 
     return result
 
+def manage_files(repo_path: Path, files_to_delete: List[str], files_to_create: Optional[Dict[str, str]] = None) -> dict:
+    """
+    Delete specified files and/or create new files with given content in the repo_path.
+    Returns a dict with results for each operation.
+    """
+    results = {"deleted": [], "delete_errors": [], "created": [], "create_errors": []}
+    # Delete files
+    for rel_path in files_to_delete:
+        file_path = repo_path / rel_path
+        try:
+            # Security: ensure file is inside repo_path
+            file_path = file_path.resolve()
+            file_path.relative_to(repo_path.resolve())
+            if file_path.exists():
+                file_path.unlink()
+                results["deleted"].append(str(file_path))
+            else:
+                results["delete_errors"].append(f"{file_path} not found")
+        except Exception as e:
+            results["delete_errors"].append(f"{file_path}: {e}")
+
+    # Create files
+    if files_to_create:
+        for rel_path, content in files_to_create.items():
+            file_path = repo_path / rel_path
+            try:
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_text(content, encoding="utf-8")
+                results["created"].append(str(file_path))
+            except Exception as e:
+                results["create_errors"].append(f"{file_path}: {e}")
+
+    return results
+
 # === Endpoints ===
 
 @app.get("/")
 async def root():
-    """Serve the frontend interface."""
+    """Serve the landing page."""
+    return FileResponse('static/landing.html')
+
+@app.get("/dashboard")
+async def dashboard():
+    """Serve the main application dashboard."""
     return FileResponse('static/index.html')
+
+@app.get("/pricing")
+async def pricing_page():
+    """Serve the pricing page."""
+    return FileResponse('static/pricing.html')
+
+@app.get("/help")
+async def help_page():
+    """Serve the help/faq page."""
+    return FileResponse('static/help.html')
+
+@app.get("/bugs.html")
+async def bugs_page():
+    """Serve the bug reports page."""
+    return FileResponse('static/bugs.html')
+
+@app.get("/vulnerabilities.html")
+async def vulnerabilities_page():
+    """Serve the vulnerabilities page."""
+    return FileResponse('static/vulnerabilities.html')
+
+@app.get("/login.html")
+async def login_page():
+    """Serve the login page with injected configuration."""
+    try:
+        with open('static/login.html', 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Inject Google Client ID
+        client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+        content = content.replace("YOUR_GOOGLE_CLIENT_ID", client_id)
+        
+        return HTMLResponse(content=content)
+    except Exception as e:
+        logger.error(f"Error serving login page: {e}")
+        return FileResponse('static/login.html')
+
+@app.get("/api/config")
+async def get_config():
+    """Get frontend configuration (API base URL, environment, Google Client ID, etc.)."""
+    return {
+        "api_base": API_BASE_URL,
+        "environment": ENVIRONMENT,
+        "google_client_id": os.getenv("GOOGLE_CLIENT_ID", "")
+    }
 
 @app.get("/status")
 async def status():
@@ -781,13 +990,9 @@ async def status():
 
 # Repository Management Endpoints
 @app.post("/repositories")
-async def add_repository(repo: RepositoryRequest, authorization: Optional[str] = Header(None)):
+async def add_repository(repo: RepositoryRequest, current_user: dict = Depends(get_current_user)):
     """Add a new repository."""
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=ERROR_MISSING_AUTH)
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail=ERROR_INVALID_KEY)
+    # Auth handled by Depends(get_current_user)
 
     try:
         # Check if the branch exists on the remote repository
@@ -804,7 +1009,19 @@ async def add_repository(repo: RepositoryRequest, authorization: Optional[str] =
             headers["Authorization"] = f"token {repo.github_token}"
         branch_response = requests.get(branch_check_url, headers=headers)
         if branch_response.status_code != 200:
-            raise HTTPException(status_code=400, detail=f"Branch '{repo.branch}' does not exist on remote repository.")
+            # Check if repo exists at all
+            repo_check_url = f"https://api.github.com/repos/{owner}/{repo_name}"
+            repo_response = requests.get(repo_check_url, headers=headers)
+            
+            if repo_response.status_code == 200:
+                # Repo exists, check if it's empty (size 0)
+                repo_data = repo_response.json()
+                if repo_data.get('size', 0) == 0:
+                    print(f"Repository '{repo_name}' appears to be empty. Proceeding without branch check.")
+                else:
+                     raise HTTPException(status_code=400, detail=f"Branch '{repo.branch}' does not exist on remote repository.")
+            else:
+                raise HTTPException(status_code=400, detail=f"Branch '{repo.branch}' does not exist on remote repository.")
 
         # Auto-generate local path if not provided (format: base_path/owner/repo_name)
         local_path = repo.local_path
@@ -833,63 +1050,57 @@ async def add_repository(repo: RepositoryRequest, authorization: Optional[str] =
             branch=repo.branch,
             github_token=repo.github_token,
             local_path=local_path,
-            description=repo.description
+            description=repo.description,
+            user_id=current_user.get("id")
         )
         return {"status": "success", "repo_id": repo_id, "message": "Repository added successfully", "local_path": local_path}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/repositories")
-async def get_repositories(authorization: Optional[str] = Header(None)):
+async def get_repositories(current_user: dict = Depends(get_current_user)):
     """Get all repositories."""
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=ERROR_MISSING_AUTH)
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail=ERROR_INVALID_KEY)
+    # Auth handled by Depends(get_current_user)
     
-    repos = db.get_all_repositories()
+    user_id = current_user.get("id")
+    repos = db.get_all_repositories(user_id=user_id)
     return repos
 
 @app.get("/repositories/{repo_id}")
-async def get_repository(repo_id: int, authorization: Optional[str] = Header(None)):
+async def get_repository(repo_id: int, current_user: dict = Depends(get_current_user)):
     """Get a specific repository."""
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=ERROR_MISSING_AUTH)
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail=ERROR_INVALID_KEY)
+    # Auth handled by Depends(get_current_user)
     
-    repo = db.get_repository(repo_id)
+    user_id = current_user.get("id")
+    repo = db.get_repository(repo_id, user_id=user_id)
+    
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found or access denied")
+        
+    return repo
     if not repo:
         raise HTTPException(status_code=404, detail=ERROR_REPO_NOT_FOUND)
     return repo
 
 @app.delete("/repositories/{repo_id}")
-async def delete_repository(repo_id: int, authorization: Optional[str] = Header(None)):
+async def delete_repository(repo_id: int, current_user: dict = Depends(get_current_user)):
     """Delete a repository."""
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=ERROR_MISSING_AUTH)
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail=ERROR_INVALID_KEY)
+    # Auth handled by Depends(get_current_user)
     
-    success = db.delete_repository(repo_id)
+    user_id = current_user.get("id")
+    success = db.delete_repository(repo_id, user_id=user_id)
     if not success:
         raise HTTPException(status_code=404, detail=ERROR_REPO_NOT_FOUND)
     return {"status": "success", "message": "Repository deleted successfully"}
 
 @app.post("/repositories/{repo_id}/clone")
-async def clone_repository(repo_id: int, authorization: Optional[str] = Header(None)):
+async def clone_repository(repo_id: int, current_user: dict = Depends(get_current_user)):
     """Clone a repository to its local path."""
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=ERROR_MISSING_AUTH)
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail=ERROR_INVALID_KEY)
+    # Auth handled by Depends(get_current_user)
     
+    user_id = current_user.get("id")
     # Get repository info
-    repo = db.get_repository(repo_id)
+    repo = db.get_repository(repo_id, user_id=user_id)
     if not repo:
         raise HTTPException(status_code=404, detail=ERROR_REPO_NOT_FOUND)
     
@@ -940,205 +1151,81 @@ async def clone_repository(repo_id: int, authorization: Optional[str] = Header(N
         }
 
 @app.post("/update-code-by-id")
-async def update_code_by_id(req: UpdateByIdRequest, authorization: Optional[str] = Header(None)):
-    """Update code using repository ID instead of path."""
-    print("Entered /update-code-by-id API endpoint")
-    start_time = time.time()
-    # Authentication
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=ERROR_MISSING_AUTH)
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail=ERROR_INVALID_KEY)
-
-    # Get repository info
-    repo = db.get_repository(req.repo_id)
-    if not repo:
-        raise HTTPException(status_code=404, detail=ERROR_REPO_NOT_FOUND)
-
-    # Determine repo path
-    if repo['local_path']:
-        repo_path = Path(repo['local_path'])
-    else:
-        repo_path = ALLOWED_BASE / repo['owner'] / repo['name']
-
-    # Log request to database
-    request_id = db.log_request(
-        endpoint=ENDPOINT_UPDATE_CODE_BY_ID,
-        repo_id=req.repo_id,
-        repo_path=str(repo_path),
-        instructions=req.instructions,
-        dry_run=req.dry_run if req.dry_run is not None else False,
-        status="processing"
-    )
-
+async def update_code_by_id(req: UpdateByIdRequest, current_user: dict = Depends(get_current_user)):
+    """Queue a code update job for processing."""
     try:
-        github_token = req.github_token or repo.get('github_token')
-        print(f"req.pr_target_branch={req.pr_target_branch}, PR_TARGET_BRANCH={PR_TARGET_BRANCH}")
-        target_branch = req.pr_target_branch or PR_TARGET_BRANCH
-        print(f"Final target_branch={target_branch}")
-        result = run_aider(
-            repo_path,
-            req.instructions,
-            dry_run=req.dry_run if req.dry_run is not None else False,
+        # Get full user details including plan
+        user = db.get_user_by_google_id(current_user['user_id'])
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        plan_type = user.get('plan_type', 'free')
+        limit = PLAN_LIMITS.get(plan_type, 5)
+        
+        # Check usage
+        # For 'free', it's lifetime limit. For others, it's monthly.
+        start_date = None
+        if plan_type != 'free':
+            # Start of current month
+            now = datetime.utcnow()
+            start_date = datetime(now.year, now.month, 1)
+            
+        usage = db.get_user_job_count(user['id'], start_date)
+        
+        if usage >= limit:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Plan limit exceeded. You have used {usage}/{limit} requests. Please upgrade your plan."
+            )
+
+        repo = db.get_repository(req.repo_id)
+        if not repo:
+            raise HTTPException(status_code=404, detail="Repository not found")
+        
+        # Create job in queue
+        job_id = db.create_job(
             repo_id=req.repo_id,
-            github_url=repo['github_url'],
-            github_token=github_token,
-            pr_target_branch=target_branch
+            instructions=req.instructions,
+            user_id=user['id']
         )
-        execution_time = time.time() - start_time
-        status = "completed"
-        if not isinstance(result, dict) or ("error" in result if result else False):
-            status = "failed"
-        db.update_request_status(
-            request_id=request_id,
-            status=status,
-            execution_time=execution_time,
-            result_data=result
-        )
-        db.log_api_metric(
-            endpoint=ENDPOINT_UPDATE_CODE_BY_ID,
-            method="POST",
-            status_code=200,
-            response_time=execution_time
-        )
+        
+        logger.info(f"✅ Job {job_id} queued for repo {req.repo_id} by user {user['id']}")
+        
         return {
-            "status": "done",
-            "repo": repo['name'],
-            "repo_id": req.repo_id,
-            "result": result,
-            "request_id": request_id
+            "status": "queued",
+            "job_id": job_id,
+            "message": "Your code update job has been queued",
+            "usage": f"{usage+1}/{limit}"
         }
+    
+    except HTTPException:
+        raise
     except Exception as e:
-        execution_time = time.time() - start_time
-        error_result = {"error": "internal_error", "message": str(e)}
-        db.update_request_status(
-            request_id=request_id,
-            status="error",
-            execution_time=execution_time,
-            result_data=error_result
-        )
-        db.log_api_metric(
-            endpoint=ENDPOINT_UPDATE_CODE_BY_ID,
-            method="POST",
-            status_code=500,
-            response_time=execution_time
-        )
+        logger.error(f"Error queuing job: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/logs")
-async def get_logs(limit: int = 50, authorization: Optional[str] = Header(None)):
-    """Get recent API request logs."""
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Invalid API key")
-    
-    logs = db.get_recent_requests(limit)
-    return {"logs": logs}
 
-@app.get("/repo/{repo_name}/history")
-async def get_repo_history(repo_name: str, limit: int = 20, authorization: Optional[str] = Header(None)):
-    """Get execution history for a specific repository."""
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Invalid API key")
-    
-    # Construct full repo path
-    repo_path = str(ALLOWED_BASE / repo_name)
-    history = db.get_repo_history(repo_path, limit)
-    return {"repo": repo_name, "history": history}
+@app.get("/job/{job_id}")
+async def get_job_status(job_id: int, current_user: dict = Depends(get_current_user)):
+    """Get the status of a job."""
+    job = db.get_job_status(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
-@app.get("/stats")
-async def get_stats(hours: int = 24, authorization: Optional[str] = Header(None)):
-    """Get API usage statistics."""
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Invalid API key")
-    
-    stats = db.get_api_stats(hours)
-    return {"stats": stats, "period_hours": hours}
 
-@app.delete("/logs/cleanup")
-async def cleanup_logs(days: int = 30, authorization: Optional[str] = Header(None)):
-    """Clean up old logs."""
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Invalid API key")
-    
-    result = db.cleanup_old_logs(days)
-    return {"cleanup_result": result, "days": days}
-
-@app.get("/repositories/{repo_id}/ci-status/{branch_name}")
-async def get_repository_ci_status(repo_id: int, branch_name: str, authorization: Optional[str] = Header(None)):
-    """Get CI/CD status for a specific branch."""
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=ERROR_MISSING_AUTH)
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail=ERROR_INVALID_KEY)
-    
-    # Get repository info
+@app.get("/repository/{repo_id}/jobs")
+async def get_repository_jobs(repo_id: int, current_user: dict = Depends(get_current_user)):
+    """Get all jobs for a repository."""
     repo = db.get_repository(repo_id)
     if not repo:
-        raise HTTPException(status_code=404, detail=ERROR_REPO_NOT_FOUND)
+        raise HTTPException(status_code=404, detail="Repository not found")
     
-    # Get CI status using repository's GitHub token
-    github_token = repo.get('github_token')
-    if not github_token:
-        raise HTTPException(status_code=400, detail="No GitHub token configured for this repository")
-    
-    ci_status = get_ci_status(repo['github_url'], branch_name, github_token)
-    
+    jobs = db.get_repo_jobs(repo_id)
     return {
         "repo_id": repo_id,
-        "repo_name": repo['name'],
-        "branch_name": branch_name,
-        "ci_status": ci_status,
-        "github_url": repo['github_url']
-    }
-
-@app.post("/repositories/{repo_id}/create-pr/{branch_name}")
-async def manually_create_pr(repo_id: int, branch_name: str, authorization: Optional[str] = Header(None)):
-    """Manually create a PR for a branch (bypass CI/CD wait)."""
-    if not authorization:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=ERROR_MISSING_AUTH)
-    token = authorization.split()[-1]
-    if token != API_KEY:
-        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail=ERROR_INVALID_KEY)
-    
-    # Get repository info
-    repo = db.get_repository(repo_id)
-    if not repo:
-        raise HTTPException(status_code=404, detail=ERROR_REPO_NOT_FOUND)
-    
-    # Get GitHub token
-    github_token = repo.get('github_token')
-    if not github_token:
-        raise HTTPException(status_code=400, detail="No GitHub token configured for this repository")
-    
-    # Create PR with generic instructions
-    instructions = f"Manual PR creation for branch {branch_name}"
-    pr_result = create_pull_request(
-        github_url=repo['github_url'],
-        branch_name=branch_name,
-        instructions=instructions,
-        base_branch="master",  # or repo['branch']
-        github_token=github_token
-    )
-    
-    return {
-        "repo_id": repo_id,
-        "repo_name": repo['name'],
-        "branch_name": branch_name,
-        "pr_result": pr_result
+        "jobs": jobs,
+        "total": len(jobs)
     }
 
 @app.post("/update-code")
@@ -1186,9 +1273,9 @@ async def update_code(req: UpdateRequest, authorization: Optional[str] = Header(
         # Log API metrics
         db.log_api_metric(
             endpoint=ENDPOINT_UPDATE_CODE,
-            method="POST",
-            status_code=200,
-            response_time=execution_time
+            repo_id=0,
+            metric_name="update_code_success",
+            metric_value=execution_time
         )
 
         return {"status": "done", "repo": str(repo_path), "result": result, "request_id": request_id}
@@ -1208,12 +1295,223 @@ async def update_code(req: UpdateRequest, authorization: Optional[str] = Header(
         # Log API metrics
         db.log_api_metric(
             endpoint=ENDPOINT_UPDATE_CODE,
-            method="POST",
-            status_code=500,
-            response_time=execution_time
+            repo_id=0,
+            metric_name="update_code_error",
+            metric_value=execution_time
         )
         
         raise HTTPException(status_code=500, detail=str(e))
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+# === Security Endpoints ===
+
+@app.get("/repositories/{repo_id}/branches")
+async def get_repository_branches(repo_id: int, current_user: dict = Depends(get_current_user)):
+    """List all branches for a repository."""
+    user_id = current_user.get("id")
+    repo = db.get_repository(repo_id, user_id=user_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    
+    repo_path = Path(repo['local_path'])
+    branches = []
+    
+    try:
+        # Fetch all branches
+        subprocess.run(["git", "fetch", "--all"], cwd=str(repo_path), check=True, capture_output=True)
+        
+        # List remote branches
+        result = subprocess.run(
+            ["git", "branch", "-r"], 
+            cwd=str(repo_path), 
+            capture_output=True, 
+            text=True, 
+            check=True
+        )
+        
+        for line in result.stdout.splitlines():
+            branch = line.strip()
+            if "->" in branch: continue
+            branch_name = branch.replace("origin/", "")
+            branches.append(branch_name)
+            
+    except Exception as e:
+        logger.error(f"Failed to list branches: {e}")
+        return {"branches": [repo['branch']]}
+        
+    return {"branches": branches}
+
+@app.post("/repositories/{repo_id}/scan")
+async def scan_repository(repo_id: int, scan_all_branches: bool = False, target_branch: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Scan a repository for security vulnerabilities."""
+    # Admin check
+    if current_user.get("email") not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    user_id = current_user.get("id")
+    repo = db.get_repository(repo_id, user_id=user_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    
+    scanner = SecurityScanner()
+    repo_path = Path(repo['local_path'])
+    
+    branches_to_scan = []
+    
+    if scan_all_branches:
+        try:
+            # Fetch all branches
+            subprocess.run(["git", "fetch", "--all"], cwd=str(repo_path), check=True, capture_output=True)
+            
+            # List remote branches
+            result = subprocess.run(
+                ["git", "branch", "-r"], 
+                cwd=str(repo_path), 
+                capture_output=True, 
+                text=True, 
+                check=True
+            )
+            
+            # Parse branches (ignore HEAD)
+            for line in result.stdout.splitlines():
+                branch = line.strip()
+                if "->" in branch:
+                    continue
+                # Remove 'origin/' prefix
+                branch_name = branch.replace("origin/", "")
+                branches_to_scan.append(branch_name)
+                
+        except Exception as e:
+            logger.error(f"Failed to list branches: {e}")
+            # Fallback to current branch
+            branches_to_scan = [repo['branch']]
+    elif target_branch:
+        branches_to_scan = [target_branch]
+    else:
+        branches_to_scan = [repo['branch']]
+
+    total_findings = 0
+    total_resolved = 0
+    all_findings = []
+
+    for branch in branches_to_scan:
+        logger.info(f"Scanning branch: {branch}")
+        
+        # Create a temporary worktree for the branch to avoid messing up the main repo
+        import tempfile
+        import shutil
+        
+        worktree_path = Path(tempfile.mkdtemp())
+        try:
+            # Create worktree
+            subprocess.run(
+                ["git", "worktree", "add", str(worktree_path), f"origin/{branch}" if scan_all_branches or target_branch else branch],
+                cwd=str(repo_path),
+                check=True,
+                capture_output=True
+            )
+            
+            # Scan the worktree
+            findings = scanner.scan_repository(str(worktree_path))
+            
+            # Process findings
+            existing_vulns = db.get_vulnerabilities(repo_id, status="open", branch=branch)
+            existing_vulns += db.get_vulnerabilities(repo_id, status="in_progress", branch=branch)
+            
+            existing_map = {f"{v['file_path']}:{v['line_number']}:{v['pattern_id']}": v for v in existing_vulns}
+            found_keys = set()
+            
+            for finding in findings:
+                key = f"{finding['file_path']}:{finding['line_number']}:{finding['pattern_id']}"
+                found_keys.add(key)
+                
+                if key not in existing_map:
+                    db.log_vulnerability(
+                        repo_id=repo_id,
+                        file_path=finding['file_path'],
+                        description=finding['description'],
+                        severity=finding['severity'],
+                        line_number=finding['line_number'],
+                        pattern_id=finding['pattern_id'],
+                        branch=branch
+                    )
+                    total_findings += 1
+                all_findings.append(finding)
+
+            # Auto-resolve fixed vulnerabilities for this branch
+            for key, vuln in existing_map.items():
+                if key not in found_keys:
+                    db.update_vulnerability_status(vuln['id'], "resolved")
+                    total_resolved += 1
+                    
+        except Exception as e:
+            logger.error(f"Error scanning branch {branch}: {e}")
+        finally:
+            # Cleanup worktree
+            try:
+                subprocess.run(["git", "worktree", "remove", "--force", str(worktree_path)], cwd=str(repo_path), capture_output=True)
+                if worktree_path.exists():
+                    shutil.rmtree(worktree_path, ignore_errors=True)
+            except Exception as e:
+                logger.error(f"Failed to cleanup worktree: {e}")
+
+    return {
+        "status": "success", 
+        "findings_count": total_findings, 
+        "resolved_count": total_resolved,
+        "scanned_branches": branches_to_scan,
+        "findings": all_findings
+    }
+
+@app.get("/repositories/{repo_id}/vulnerabilities")
+async def get_vulnerabilities(repo_id: int, status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Get vulnerabilities for a repository."""
+    # Admin check
+    if current_user.get("email") not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    user_id = current_user.get("id")
+    repo = db.get_repository(repo_id, user_id=user_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+        
+    vulns = db.get_vulnerabilities(repo_id, status=status)
+    return vulns
+
+@app.post("/vulnerabilities/{vuln_id}/fix")
+async def fix_vulnerability(vuln_id: int, current_user: dict = Depends(get_current_user)):
+    """Queue a job to fix a vulnerability."""
+    # Admin check
+    if current_user.get("email") not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    user_id = current_user.get("id")
+    
+    # Get vulnerability
+    vuln = db.get_vulnerability(vuln_id)
+    if not vuln:
+        raise HTTPException(status_code=404, detail="Vulnerability not found")
+        
+    # Verify ownership
+    repo = db.get_repository(vuln['repo_id'], user_id=user_id)
+    if not repo:
+        raise HTTPException(status_code=403, detail="Access denied")
+        
+    # Create fix job
+    instructions = f"Fix the security vulnerability in {vuln['file_path']}. Issue: {vuln['description']} (Severity: {vuln['severity']}). Please analyze the code and apply a secure fix.\n\n[METADATA:VULN_ID:{vuln_id}]"
+    job_id = db.create_job(vuln['repo_id'], instructions, user_id=user_id)
+    
+    # Update status
+    db.update_vulnerability_status(vuln_id, "in_progress")
+    
+    return {"status": "success", "job_id": job_id, "message": "Fix job queued"}
+    
+    # Let's assume we added get_vulnerability to DB. 
+    # Since we didn't yet, let's skip the strict check for this specific tool call 
+    # and implement it properly in the next step.
+    
+    return {"status": "error", "message": "Not implemented yet"}
 
 @app.post("/exec")
 async def exec_command(payload: dict, authorization: Optional[str] = Header(None)):
@@ -1255,6 +1553,115 @@ async def exec_command(payload: dict, authorization: Optional[str] = Header(None
     print(f"Exec debug command in {cwd_path}: {cmd}")
     return execute_command(cmd, cwd_path)
 
+# Required authentication
+@app.get("/protected-endpoint")
+async def protected_route(current_user: dict = Depends(get_current_user)):
+    return {"message": f"Hello {current_user['name']}!"}
+
+def start_background_worker():
+    """Start the job processing worker in a separate thread."""
+    try:
+        from worker import process_repositories
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(process_repositories())
+    except Exception as e:
+        logger.error(f"Error in background worker: {e}", exc_info=True)
+
+@app.get("/api/bugs")
+async def get_bug_reports(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Get a list of bug reports."""
+    # Admin check
+    if current_user.get("email") not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    bugs = db.get_bug_reports(status=status)
+    return bugs
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_type = type(exc).__name__
+    error_message = str(exc)
+    stack_trace = traceback.format_exc()
+    endpoint = request.url.path
+    
+    # Try to get user_id from state if available (set by middleware/dependencies)
+    user_id = None
+    if hasattr(request.state, "user"):
+         user_id = request.state.user.get("id")
+
+    logger.error(f"Unhandled exception: {error_message}", exc_info=True)
+    
+    # Log to DB
+    bug_id = db.log_bug(
+        error_type=error_type,
+        error_message=error_message,
+        stack_trace=stack_trace,
+        endpoint=endpoint,
+        user_id=user_id if user_id is not None else 0
+    )
+    
+    # Auto-fix: Queue a job if we can identify the repository
+    try:
+        current_path = os.getcwd()
+        repo = db.get_repository_by_local_path(current_path)
+        
+        if repo:
+            logger.info(f"🔍 Found repository for auto-fix: {repo['name']}")
+            
+            # Create instructions for the AI
+            instructions = f"""
+CRITICAL BUG FIX REQUIRED
+
+Error Type: {error_type}
+Error Message: {error_message}
+Endpoint: {endpoint}
+
+Stack Trace:
+{stack_trace}
+
+Please analyze the stack trace and fix the bug in the codebase. 
+Ensure the fix handles the edge case that caused this error.
+"""
+            # Create job
+            job_id = db.create_job(
+                repo_id=repo['id'],
+                instructions=instructions,
+                user_id=user_id
+            )
+            logger.info(f"✅ Auto-fix job {job_id} queued for bug {bug_id}")
+            
+            # Update bug status to in_progress
+            db.update_bug_status(bug_id, "in_progress")
+            
+    except Exception as e:
+        logger.error(f"Failed to queue auto-fix job: {e}")
+
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "bug_report_id": bug_id}
+    )
+
 # Run by uvicorn when invoked directly
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # Initialize database and create tables
+    logger.info("🔧 Initializing database...")
+    db.init_db()
+    logger.info("✅ Database initialized")
+    
+    # Start background worker in a separate thread
+    logger.info("🚀 Starting background job processor...")
+    worker_thread = Thread(target=start_background_worker, daemon=True)
+    worker_thread.start()
+    logger.info("✅ Background worker started")
+    
+    # Start FastAPI server
+    logger.info("🌐 Starting FastAPI server on http://localhost:8080")
+    uvicorn.run(
+        "main:app",
+        host=HOST_ADDRESS,
+        port=8080,
+        reload=False
+    )
+
+
