@@ -190,6 +190,45 @@
             .pricing-header h1 { font-size: 2rem; }
         }
 
+        /* JARVIS Button Animations */
+        .btn-nav, .btn-primary, .btn-login, .btn-plan {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            z-index: 1;
+        }
+
+        /* Scanline effect */
+        .btn-nav::after, .btn-primary::after, .btn-login::after, .btn-plan::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -150%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            transform: skewX(-20deg);
+            transition: none;
+            z-index: -1;
+        }
+
+        .btn-nav:hover::after, .btn-primary:hover::after, .btn-login:hover::after, .btn-plan:hover::after {
+            left: 150%;
+            transition: left 0.6s ease-in-out;
+        }
+
+        /* Glow and Lift */
+        .btn-nav:hover, .btn-primary:hover, .btn-login:hover, .btn-plan:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 15px var(--primary);
+            text-shadow: 0 0 5px #fff;
+        }
+
+        /* Click Press */
+        .btn-nav:active, .btn-primary:active, .btn-login:active, .btn-plan:active {
+            transform: scale(0.95) translateY(0);
+            box-shadow: 0 0 5px var(--primary);
+        }
     </style>
 </head>
 <body>
