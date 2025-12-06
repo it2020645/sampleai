@@ -425,7 +425,7 @@
             <a href="/dashboard" style="color: var(--primary);">DASHBOARD</a>
             <a href="/pricing">PRICING</a>
             <a href="/help">SYSTEM HELP</a>
-            <a href="/bugs.html" id="nav-bugs" class="admin-only">CODE SCAN</a>
+            <a href="/bugs" id="nav-bugs" class="admin-only">CODE SCAN</a>
         </div>
         <div>
             <button onclick="signOut()" style="padding: 8px 20px; font-size: 0.9rem; background: rgba(255, 0, 85, 0.1); border: 1px solid #ff0055; color: #ff0055; cursor: pointer; font-family: 'JetBrains Mono'; font-weight: bold; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);">DISENGAGE</button>
@@ -896,7 +896,7 @@
             div.className = 'repo-item';
             
             const securityBtn = ADMIN_EMAILS.includes(currentUserEmail) 
-                ? `<a href="vulnerabilities.html?repo_id=${repo.id}" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px; text-decoration: none; margin-right: 5px; font-family: 'JetBrains Mono'; clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);">🛡️ SCAN</a>`
+                ? `<a href="/vulnerabilities?repo_id=${repo.id}" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px; text-decoration: none; margin-right: 5px; font-family: 'JetBrains Mono'; clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);">🛡️ SCAN</a>`
                 : '';
 
             div.innerHTML = `

@@ -949,15 +949,17 @@ async def help_page():
     """Serve the help/faq page."""
     return FileResponse('static/help.html')
 
-@app.get("/bugs.html")
+@app.get("/bugs")
 async def bugs_page():
-    """Serve the bug reports page."""
+    """Serve the system diagnostics page."""
     return FileResponse('static/bugs.html')
 
-@app.get("/vulnerabilities.html")
+@app.get("/vulnerabilities")
 async def vulnerabilities_page():
-    """Serve the vulnerabilities page."""
+    """Serve the vulnerability scan page."""
     return FileResponse('static/vulnerabilities.html')
+
+
 
 @app.get("/login.html")
 async def login_page():

@@ -250,7 +250,7 @@
             <a href="/dashboard">DASHBOARD</a>
             <a href="/pricing">PRICING</a>
             <a href="/help">SYSTEM HELP</a>
-            <a href="/bugs.html" style="color: var(--primary)">CODE SCAN</a>
+            <a href="/bugs" style="color: var(--primary)">CODE SCAN</a>
         </div>
         <div>
             <button onclick="signOut()" style="padding: 8px 20px; font-size: 0.9rem; background: rgba(255, 0, 85, 0.1); border: 1px solid #ff0055; color: #ff0055; cursor: pointer; font-family: 'JetBrains Mono'; font-weight: bold; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);">DISENGAGE</button>
@@ -285,14 +285,14 @@
         </div>
     </div>
 
-    <script src="config.js"></script>
+    <script src="/static/config.js"></script>
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const repoId = urlParams.get('repo_id');
         const ADMIN_EMAILS = ["novusmundus2025@gmail.com", "batalladavid1984@gmail.com"];
 
         if (!repoId) {
-            window.location.href = 'index.html';
+            window.location.href = '/dashboard';
         }
 
         // Check Admin Access
@@ -325,7 +325,7 @@
                 return true;
             } catch (error) {
                 console.error(error);
-                window.location.href = 'login.html';
+                window.location.href = '/login.html';
                 return false;
             }
         }
@@ -480,10 +480,10 @@
                     method: 'POST',
                     credentials: 'include'
                 });
-                window.location.href = 'login.html';
+                window.location.href = '/login.html';
             } catch (error) {
                 console.error('Error signing out:', error);
-                window.location.href = 'login.html';
+                window.location.href = '/login.html';
             }
         }
 
