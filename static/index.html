@@ -949,6 +949,74 @@
             showTechStackConfirmationModal();
         });
 
+        // Validate tech stack with AI before submitting
+        async function validateAndSubmitRepository(techStack) {
+            if (!pendingRepoData) return;
+
+            try {
+                // Show validating modal
+                showRepoModal(
+                    'info',
+                    '🤖',
+                    'Validating Tech Stack',
+                    'AI is analyzing your tech stack...',
+                    'Please wait'
+                );
+
+                // Call AI validation endpoint
+                const validationResponse = await fetch(`${API_BASE}/validate-techstack`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        tech_stack: techStack,
+                        github_url: pendingRepoData.github_url
+                    })
+                });
+
+                const validationResult = await validationResponse.json();
+
+                // Close validation modal
+                closeEmptyRepoModal();
+
+                if (!validationResult.is_valid) {
+                    // Show error modal with AI's reason
+                    showRepoModal(
+                        'error',
+                        '❌',
+                        'Invalid Tech Stack',
+                        validationResult.message || 'The tech stack you provided does not appear to be valid. Please provide real technologies.',
+                        'Try Again',
+                        () => {
+                            // Reopen tech stack modal
+                            setTimeout(() => showTechStackConfirmationModal(), 500);
+                        }
+                    );
+                    return;
+                }
+
+                // Validation passed, proceed with submission
+                submitRepository(techStack);
+
+            } catch (error) {
+                console.error('Validation error:', error);
+                // If validation fails, show error but allow user to retry
+                closeEmptyRepoModal();
+                showRepoModal(
+                    'error',
+                    '⚠️',
+                    'Validation Error',
+                    'Unable to validate tech stack. Please try again.',
+                    'Retry',
+                    () => {
+                        setTimeout(() => showTechStackConfirmationModal(), 500);
+                    }
+                );
+            }
+        }
+
         // Actually submit the repository after confirmation
         async function submitRepository(techStack) {
             if (!pendingRepoData) return;
@@ -1461,13 +1529,13 @@
                     return;
                 }
 
-                // Submit with tech stack
+                // Validate tech stack with AI first
                 modal.classList.add('closing');
                 modal.classList.remove('active');
                 setTimeout(() => {
                     modal.style.display = 'none';
                     modal.classList.remove('closing');
-                    submitRepository(techStack);
+                    validateAndSubmitRepository(techStack);
                 }, 900);
             } else {
                 // User cancelled

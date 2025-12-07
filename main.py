@@ -26,6 +26,7 @@ from auth import get_current_user
 from auth_routes import router as auth_router
 from security_scanner import SecurityScanner
 import traceback
+import openai
 # Load environment variables from .env file
 load_dotenv(override=True)
 
@@ -1213,6 +1214,97 @@ async def check_repository_status(repo_id: int, current_user: dict = Depends(get
             "exists": True,
             "is_empty": None,
             "message": f"Error checking repository: {str(e)}"
+        }
+
+class TechStackValidationRequest(BaseModel):
+    tech_stack: str
+    github_url: str
+
+@app.post("/validate-techstack")
+async def validate_tech_stack(req: TechStackValidationRequest, current_user: dict = Depends(get_current_user)):
+    """Validate tech stack using AI before repository registration."""
+    try:
+        # Set OpenAI API key
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+
+        if not openai.api_key:
+            logger.warning("OpenAI API key not configured, skipping validation")
+            return {
+                "is_valid": True,
+                "message": "Validation skipped - API key not configured"
+            }
+
+        # Extract repo name from URL for context
+        repo_name = req.github_url.split('/')[-1].replace('.git', '')
+
+        # Use OpenAI to validate tech stack
+        prompt = f"""You are a tech stack validator. Analyze if the provided tech stack is valid and realistic for a software project.
+
+Repository: {repo_name}
+Tech Stack Provided: {req.tech_stack}
+
+Evaluate:
+1. Are these real, commonly used technologies?
+2. Do they work together in a typical software stack?
+3. Is the format reasonable (e.g., "Python, FastAPI, PostgreSQL" or "Node.js/React/MongoDB")?
+
+Respond with ONLY a JSON object in this format:
+{{"is_valid": true/false, "reason": "brief explanation"}}
+
+Examples of VALID tech stacks:
+- "Python, Django, PostgreSQL"
+- "Node.js, Express, MongoDB"
+- "Java/Spring Boot/MySQL"
+- "React, TypeScript, Node.js"
+
+Examples of INVALID tech stacks:
+- "asdfasdf" (gibberish)
+- "banana, apple, orange" (not technologies)
+- "XYZ123" (unclear/fake)
+- "" (empty)
+"""
+
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a precise tech stack validator. Always respond with valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=150
+        )
+
+        result_text = response.choices[0].message.content.strip()
+
+        # Parse JSON response
+        import json
+        result = json.loads(result_text)
+
+        if not result.get('is_valid', True):
+            logger.info(f"Tech stack validation failed: {req.tech_stack} - Reason: {result.get('reason')}")
+            return {
+                "is_valid": False,
+                "message": result.get('reason', 'The provided tech stack does not appear to be valid.')
+            }
+
+        return {
+            "is_valid": True,
+            "message": "Tech stack validated successfully"
+        }
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse AI response: {e}")
+        # If AI response is unparseable, allow it (fail open)
+        return {
+            "is_valid": True,
+            "message": "Validation completed"
+        }
+    except Exception as e:
+        logger.error(f"Error validating tech stack: {e}")
+        # Fail open - don't block user if validation service fails
+        return {
+            "is_valid": True,
+            "message": "Validation service unavailable, proceeding"
         }
 
 @app.post("/update-code-by-id")
