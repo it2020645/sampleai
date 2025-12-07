@@ -1367,7 +1367,7 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
         branch_names = [branch['name'] for branch in branches_data]
 
         # Return branches with common ones first
-        common_branches = ['main', 'master', 'develop', 'development']
+        common_branches = ['default', 'main', 'master', 'develop', 'development']
         sorted_branches = []
 
         # Add common branches first if they exist

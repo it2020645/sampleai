@@ -770,8 +770,9 @@
                     <div class="form-group">
                         <label for="branch">Branch</label>
                         <select id="branch" name="branch">
+                            <option value="default" selected>default</option>
                             <option value="main">main</option>
-                            <option value="master" selected>master</option>
+                            <option value="master">master</option>
                         </select>
                         <small style="color: var(--text-muted); display: block; margin-top: 5px; font-size: 0.85em;">
                             Add GitHub URL and token to load branches automatically
@@ -1607,8 +1608,10 @@
                         const option = document.createElement('option');
                         option.value = branch;
                         option.textContent = branch;
-                        // Select main or master by default
-                        if (branch === 'main' || (branch === 'master' && !result.branches.includes('main'))) {
+                        // Select default, main, or master by priority
+                        if (branch === 'default' ||
+                            (branch === 'main' && !result.branches.includes('default')) ||
+                            (branch === 'master' && !result.branches.includes('default') && !result.branches.includes('main'))) {
                             option.selected = true;
                         }
                         branchSelect.appendChild(option);
@@ -1616,8 +1619,9 @@
                 } else {
                     // Fallback to default branches
                     branchSelect.innerHTML = `
+                        <option value="default" selected>default</option>
                         <option value="main">main</option>
-                        <option value="master" selected>master</option>
+                        <option value="master">master</option>
                     `;
                     if (result.message) {
                         console.warn('Branch fetch warning:', result.message);
@@ -1630,8 +1634,9 @@
                 console.error('Error fetching branches:', error);
                 // Fallback to default branches
                 branchSelect.innerHTML = `
+                    <option value="default" selected>default</option>
                     <option value="main">main</option>
-                    <option value="master" selected>master</option>
+                    <option value="master">master</option>
                 `;
                 branchSelect.disabled = false;
             }
