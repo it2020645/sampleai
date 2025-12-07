@@ -1601,7 +1601,11 @@
 
                 const result = await response.json();
 
-                if (result.success && result.branches.length > 0) {
+                // Debug logging
+                console.log('Branch fetch result:', result);
+                console.log('Branches received:', result.branches);
+
+                if (result.success && result.branches && result.branches.length > 0) {
                     // Populate branches
                     branchSelect.innerHTML = '';
                     result.branches.forEach(branch => {
@@ -1616,8 +1620,10 @@
                         }
                         branchSelect.appendChild(option);
                     });
+                    console.log(`✓ Loaded ${result.branches.length} branches successfully`);
                 } else {
                     // Fallback to default branches
+                    console.warn('Falling back to default branches. Reason:', result.message || 'No branches returned');
                     branchSelect.innerHTML = `
                         <option value="default" selected>default</option>
                         <option value="main">main</option>
