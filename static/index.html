@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Aider Repository Manager</title>
+    <!-- v2.0 - High-Tech Modal Update -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -532,6 +536,26 @@
             transition-delay: 0.3s;
         }
 
+        /* Success variant for repository operations */
+        .modal-container.success {
+            border-color: var(--success);
+            box-shadow:
+                0 0 30px rgba(0, 255, 157, 0.5),
+                0 0 60px rgba(0, 255, 157, 0.3),
+                inset 0 0 60px rgba(0, 255, 157, 0.1);
+        }
+
+        .modal-line.success {
+            background: linear-gradient(90deg, transparent, var(--success), transparent);
+            box-shadow: 0 0 10px var(--success), 0 0 20px var(--success);
+        }
+
+        .modal-container.success::before,
+        .modal-container.success::after {
+            border-color: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+
         /* Corner decorations */
         .modal-container::before,
         .modal-container::after {
@@ -787,7 +811,7 @@
                 <form id="execute-form">
                     <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px;">
                         <div class="form-group">
-                            <label for="repo-select">Select Repository *</label>
+                            <label for="repo-select">Select Repository</label>
                             <select id="repo-select" name="repo_id" required>
                                 <option value="">Choose a repository...</option>
                             </select>
@@ -1300,26 +1324,75 @@
         
         // Show status message
         function showStatus(message, type) {
-            // Create a simple toast notification
-            const toast = document.createElement('div');
-            toast.className = `status ${type}`;
-            toast.textContent = message;
-            toast.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                padding: 15px 20px;
-                border-radius: 8px;
-                z-index: 1000;
-                font-weight: 600;
-                animation: slideIn 0.3s ease;
-            `;
-            
-            document.body.appendChild(toast);
-            
+            // Use high-tech modal instead of toast
+            const isSuccess = type === 'success';
+            const icon = isSuccess ? '✓' : '⚠️';
+            const title = isSuccess ? 'Success' : 'Error';
+
+            showRepoModal(
+                type,
+                icon,
+                title,
+                message,
+                isSuccess ? 'Continue' : 'Understood'
+            );
+        }
+
+        // High-Tech Modal for Repository Operations
+        function showRepoModal(type, icon, title, message, buttonText, callback) {
+            const modal = document.getElementById('empty-repo-modal');
+            const modalLine = modal.querySelector('.modal-line');
+            const modalContainer = modal.querySelector('.modal-container');
+            const modalLoading = document.getElementById('modal-loading');
+            const modalContent = document.getElementById('modal-content');
+            const modalIcon = modalContent.querySelector('.modal-icon');
+            const modalTitle = modalContent.querySelector('h2');
+            const modalMessage = modalContent.querySelector('.modal-body p strong').parentElement;
+            const modalButton = modalContent.querySelector('.modal-btn-primary');
+
+            // Set content
+            modalIcon.textContent = icon;
+            modalTitle.textContent = title;
+            modalMessage.innerHTML = `<strong>${message}</strong>`;
+
+            // Set type styling
+            if (type === 'success') {
+                modalContainer.classList.add('success');
+                modalLine.classList.add('success');
+                modalTitle.style.color = 'var(--success)';
+                modalTitle.style.textShadow = '0 0 10px var(--success)';
+            } else {
+                modalContainer.classList.remove('success');
+                modalLine.classList.remove('success');
+                modalTitle.style.color = 'var(--primary)';
+                modalTitle.style.textShadow = '0 0 10px var(--primary)';
+            }
+
+            // Set callback
+            modalButton.onclick = () => {
+                closeEmptyRepoModal();
+                if (callback) {
+                    setTimeout(callback, 900);
+                }
+            };
+
+            // Show modal with line animation
+            modal.style.display = 'flex';
+
+            // Show loading first
+            modalLoading.classList.add('active');
+            modalContent.style.display = 'none';
+
+            // After line expands, show modal container
             setTimeout(() => {
-                toast.remove();
-            }, 5000);
+                modal.classList.add('active');
+            }, 50);
+
+            // After a brief loading, show the content
+            setTimeout(() => {
+                modalLoading.classList.remove('active');
+                modalContent.style.display = 'block';
+            }, 1000);
         }
         
         // Auto-fill owner and repo name from GitHub URL
