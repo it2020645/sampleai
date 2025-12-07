@@ -935,13 +935,27 @@
             checkAuthAndLoad();
         });
         
+        // Store repo data temporarily for confirmation
+        let pendingRepoData = null;
+
         // Add repository form submission
         document.getElementById('add-repo-form').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const formData = new FormData(e.target);
-            const repoData = Object.fromEntries(formData);
-            
+            pendingRepoData = Object.fromEntries(formData);
+
+            // Show confirmation modal to get tech stack
+            showTechStackConfirmationModal();
+        });
+
+        // Actually submit the repository after confirmation
+        async function submitRepository(techStack) {
+            if (!pendingRepoData) return;
+
+            // Add tech stack to repo data
+            pendingRepoData.tech_stack = techStack;
+
             try {
                 const response = await fetch(`${API_BASE}/repositories`, {
                     method: 'POST',
@@ -949,13 +963,14 @@
                         'Content-Type': 'application/json'
                     },
                     credentials: 'include',
-                    body: JSON.stringify(repoData)
+                    body: JSON.stringify(pendingRepoData)
                 });
-                
+
                 if (response.ok) {
                     showStatus('Repository added successfully!', 'success');
-                    e.target.reset();
+                    document.getElementById('add-repo-form').reset();
                     loadRepositories();
+                    pendingRepoData = null;
                 } else {
                     const error = await response.json();
                     showStatus(`Error: ${error.detail}`, 'error');
@@ -963,7 +978,7 @@
             } catch (error) {
                 showStatus(`Error: ${error.message}`, 'error');
             }
-        });
+        }
         
         // Execute form submission
         document.getElementById('execute-form').addEventListener('submit', async function(e) {
@@ -1394,7 +1409,87 @@
                 modalContent.style.display = 'block';
             }, 1000);
         }
-        
+
+        // Tech Stack Confirmation Modal
+        function showTechStackConfirmationModal() {
+            const modal = document.getElementById('techstack-modal');
+            const modalLine = modal.querySelector('.modal-line');
+            const techStackInput = document.getElementById('techstack-input');
+
+            // Reset input
+            techStackInput.value = '';
+
+            // Show modal with line animation
+            modal.style.display = 'flex';
+
+            // After line expands, show modal container
+            setTimeout(() => {
+                modal.classList.add('active');
+                // Focus on input after animation
+                setTimeout(() => {
+                    techStackInput.focus();
+                }, 600);
+            }, 50);
+        }
+
+        function closeTechStackModal(confirmed) {
+            const modal = document.getElementById('techstack-modal');
+            const techStackInput = document.getElementById('techstack-input');
+
+            if (confirmed) {
+                const techStack = techStackInput.value.trim();
+                if (!techStack) {
+                    // Show error if no tech stack provided
+                    showRepoModal(
+                        'error',
+                        '⚠️',
+                        'Tech Stack Required',
+                        'Please provide your basic tech stack to continue.',
+                        'Understood',
+                        () => {
+                            // Reopen the tech stack modal
+                            setTimeout(() => showTechStackConfirmationModal(), 500);
+                        }
+                    );
+                    // Don't close the modal yet
+                    modal.classList.add('closing');
+                    modal.classList.remove('active');
+                    setTimeout(() => {
+                        modal.style.display = 'none';
+                        modal.classList.remove('closing');
+                    }, 900);
+                    return;
+                }
+
+                // Submit with tech stack
+                modal.classList.add('closing');
+                modal.classList.remove('active');
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                    modal.classList.remove('closing');
+                    submitRepository(techStack);
+                }, 900);
+            } else {
+                // User cancelled
+                modal.classList.add('closing');
+                modal.classList.remove('active');
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                    modal.classList.remove('closing');
+                    pendingRepoData = null;
+
+                    // Show cancellation message
+                    showRepoModal(
+                        'error',
+                        '🚫',
+                        'Registration Cancelled',
+                        'Repository registration was cancelled. The repository will not be added.',
+                        'Understood'
+                    );
+                }, 900);
+            }
+        }
+
         // Auto-fill owner and repo name from GitHub URL
         document.getElementById('github-url').addEventListener('input', function(e) {
             const url = e.target.value;
@@ -1530,6 +1625,52 @@
                         Close
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tech Stack Confirmation Modal -->
+    <div id="techstack-modal" class="modal-overlay">
+        <div class="modal-line"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <div class="modal-icon">📦</div>
+                <h2>Confirm Tech Stack</h2>
+            </div>
+            <div class="modal-body">
+                <p><strong>Before registering this repository, please provide your basic tech stack.</strong></p>
+                <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 20px;">
+                    Examples: Python/Django, Node.js/React, Java/Spring Boot, etc.
+                </p>
+                <input
+                    type="text"
+                    id="techstack-input"
+                    placeholder="e.g., Python, FastAPI, PostgreSQL"
+                    style="
+                        width: 100%;
+                        padding: 12px 15px;
+                        background: rgba(0, 0, 0, 0.3);
+                        border: 1px solid var(--primary);
+                        color: var(--text-main);
+                        font-family: 'Inter', sans-serif;
+                        font-size: 1rem;
+                        outline: none;
+                        margin-bottom: 10px;
+                        clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+                    "
+                    onkeypress="if(event.key === 'Enter') closeTechStackModal(true)"
+                />
+                <p style="color: var(--text-muted); font-size: 0.85rem; font-style: italic;">
+                    Press Enter or click Confirm to proceed
+                </p>
+            </div>
+            <div class="modal-actions">
+                <button onclick="closeTechStackModal(true)" class="modal-btn modal-btn-primary">
+                    Confirm & Register
+                </button>
+                <button onclick="closeTechStackModal(false)" class="modal-btn modal-btn-secondary">
+                    Cancel
+                </button>
             </div>
         </div>
     </div>
