@@ -231,6 +231,267 @@
             transform: scale(0.95) translateY(0);
             box-shadow: 0 0 5px var(--primary);
         }
+
+        /* High-Tech Modal Popup */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        /* Horizontal line that expands */
+        .modal-line {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            width: 0;
+            box-shadow: 0 0 10px var(--primary), 0 0 20px var(--primary);
+            transition: width 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        }
+
+        .modal-overlay.active .modal-line {
+            width: 400px;
+        }
+
+        /* Modal container */
+        .modal-container {
+            position: relative;
+            background: linear-gradient(135deg, rgba(5, 15, 25, 0.95), rgba(10, 25, 40, 0.95));
+            border: 2px solid var(--primary);
+            clip-path: polygon(
+                20px 0, 100% 0, 100% calc(100% - 20px),
+                calc(100% - 20px) 100%, 0 100%, 0 20px
+            );
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow:
+                0 0 30px rgba(0, 168, 255, 0.5),
+                0 0 60px rgba(0, 168, 255, 0.3),
+                inset 0 0 60px rgba(0, 168, 255, 0.1);
+            transform: scale(0);
+            opacity: 0;
+            transition: all 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+            transition-delay: 0.3s;
+        }
+
+        .modal-overlay.active .modal-container {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        .modal-overlay.closing .modal-container {
+            transform: scale(0);
+            opacity: 0;
+            transition-delay: 0s;
+        }
+
+        .modal-overlay.closing .modal-line {
+            width: 0;
+            transition-delay: 0.3s;
+        }
+
+        /* Gold variant for success */
+        .modal-container.success {
+            border-color: var(--secondary);
+            box-shadow:
+                0 0 30px rgba(212, 175, 55, 0.5),
+                0 0 60px rgba(212, 175, 55, 0.3),
+                inset 0 0 60px rgba(212, 175, 55, 0.1);
+        }
+
+        .modal-line.success {
+            background: linear-gradient(90deg, transparent, var(--secondary), transparent);
+            box-shadow: 0 0 10px var(--secondary), 0 0 20px var(--secondary);
+        }
+
+        /* Corner decorations */
+        .modal-container::before,
+        .modal-container::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--primary);
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        .modal-container.success::before,
+        .modal-container.success::after {
+            border-color: var(--secondary);
+            box-shadow: 0 0 10px var(--secondary);
+        }
+
+        .modal-container::before {
+            top: 10px;
+            left: 10px;
+            border-right: none;
+            border-bottom: none;
+        }
+
+        .modal-container::after {
+            bottom: 10px;
+            right: 10px;
+            border-left: none;
+            border-top: none;
+        }
+
+        /* Loading spinner inside modal */
+        .modal-loading {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            margin: 20px 0;
+        }
+
+        .modal-loading.active {
+            display: flex;
+        }
+
+        .modal-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(0, 168, 255, 0.2);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Modal content */
+        .modal-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--primary);
+            font-size: 1.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--primary);
+            margin-bottom: 10px;
+        }
+
+        .modal-container.success .modal-header h2 {
+            color: var(--secondary);
+            text-shadow: 0 0 10px var(--secondary);
+        }
+
+        .modal-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: inline-block;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        .modal-body {
+            text-align: center;
+            color: var(--text-main);
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        .modal-body p {
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .modal-btn {
+            padding: 12px 30px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            border: none;
+            cursor: pointer;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .modal-btn-primary {
+            background: var(--primary);
+            color: #000;
+        }
+
+        .modal-btn-primary:hover {
+            background: #33bfff;
+            box-shadow: 0 0 20px var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .modal-btn-gold {
+            background: var(--secondary);
+            color: #000;
+        }
+
+        .modal-btn-gold:hover {
+            background: #e6bf47;
+            box-shadow: 0 0 20px var(--secondary);
+            transform: translateY(-2px);
+        }
+
+        .modal-btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .modal-btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: var(--primary);
+            box-shadow: 0 0 15px rgba(0, 168, 255, 0.3);
+        }
+
+        /* Scanline effect on buttons */
+        .modal-btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -150%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            transform: skewX(-20deg);
+            transition: none;
+        }
+
+        .modal-btn:hover::after {
+            left: 150%;
+            transition: left 0.6s ease-in-out;
+        }
     </style>
 </head>
 <body>
@@ -387,11 +648,23 @@
 
                 if (response.ok) {
                     const result = await response.json();
-                    alert(`Successfully subscribed to ${planType.toUpperCase()} plan!`);
-                    window.location.href = '/dashboard';
+                    showModal(
+                        'success',
+                        '✓',
+                        'Plan Activated',
+                        `Successfully upgraded to ${planType.toUpperCase()} armor suit!`,
+                        'Access Dashboard',
+                        () => { window.location.href = '/dashboard'; }
+                    );
                 } else {
                     const error = await response.json();
-                    alert(`Error updating plan: ${error.detail}`);
+                    showModal(
+                        'error',
+                        '⚠️',
+                        'Upgrade Failed',
+                        error.detail || 'Unable to process plan upgrade at this time.',
+                        'Understood'
+                    );
                 }
             } catch (error) {
                 console.error('Error:', error);
@@ -399,6 +672,115 @@
                 window.location.href = '/login.html';
             }
         }
+
+        // High-Tech Modal Functions
+        function showModal(type, icon, title, message, buttonText, callback) {
+            const modal = document.getElementById('pricing-modal');
+            const modalLine = document.querySelector('.modal-line');
+            const modalContainer = document.querySelector('.modal-container');
+            const modalLoading = document.getElementById('modal-loading');
+            const modalContent = document.getElementById('modal-content');
+            const modalIcon = document.getElementById('modal-icon');
+            const modalTitle = document.getElementById('modal-title');
+            const modalMessage = document.getElementById('modal-message');
+            const modalButton = document.getElementById('modal-button');
+
+            // Set content
+            modalIcon.textContent = icon;
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modalButton.textContent = buttonText;
+
+            // Set type styling
+            if (type === 'success') {
+                modalContainer.classList.add('success');
+                modalLine.classList.add('success');
+                modalButton.className = 'modal-btn modal-btn-gold';
+            } else {
+                modalContainer.classList.remove('success');
+                modalLine.classList.remove('success');
+                modalButton.className = 'modal-btn modal-btn-primary';
+            }
+
+            // Set callback
+            modalButton.onclick = () => {
+                closeModal();
+                if (callback) {
+                    setTimeout(callback, 900);
+                }
+            };
+
+            // Show modal with line animation
+            modal.style.display = 'flex';
+
+            // Show loading first
+            modalLoading.classList.add('active');
+            modalContent.style.display = 'none';
+
+            // After line expands, show modal container
+            setTimeout(() => {
+                modal.classList.add('active');
+            }, 50);
+
+            // After a brief loading, show the content
+            setTimeout(() => {
+                modalLoading.classList.remove('active');
+                modalContent.style.display = 'block';
+            }, 1200);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('pricing-modal');
+
+            // Add closing class for reverse animation
+            modal.classList.add('closing');
+            modal.classList.remove('active');
+
+            // After animations complete, hide modal
+            setTimeout(() => {
+                modal.style.display = 'none';
+                modal.classList.remove('closing');
+            }, 900);
+        }
+
+        // Click outside modal to close
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal = document.getElementById('pricing-modal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        closeModal();
+                    }
+                });
+            }
+        });
     </script>
+
+    <!-- High-Tech Pricing Modal -->
+    <div id="pricing-modal" class="modal-overlay">
+        <div class="modal-line"></div>
+        <div class="modal-container">
+            <!-- Loading state -->
+            <div id="modal-loading" class="modal-loading">
+                <div class="modal-spinner"></div>
+            </div>
+
+            <!-- Content state -->
+            <div id="modal-content" style="display: none;">
+                <div class="modal-header">
+                    <div id="modal-icon" class="modal-icon">✓</div>
+                    <h2 id="modal-title">Success</h2>
+                </div>
+                <div class="modal-body">
+                    <p id="modal-message">Operation completed successfully.</p>
+                </div>
+                <div class="modal-actions">
+                    <button id="modal-button" class="modal-btn modal-btn-primary">
+                        Continue
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
