@@ -1152,6 +1152,69 @@ async def clone_repository(repo_id: int, current_user: dict = Depends(get_curren
             "manual_command": f"git clone {repo['github_url']} {repo_path}"
         }
 
+@app.get("/repositories/{repo_id}/check")
+async def check_repository_status(repo_id: int, current_user: dict = Depends(get_current_user)):
+    """Check if a repository is empty or has tech stack."""
+    user_id = current_user.get("id")
+    repo = db.get_repository(repo_id, user_id=user_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail=ERROR_REPO_NOT_FOUND)
+
+    # Determine repo path
+    if repo['local_path']:
+        repo_path = Path(repo['local_path'])
+    else:
+        repo_path = ALLOWED_BASE / repo['owner'] / repo['name']
+
+    # Check if path exists
+    if not repo_path.exists():
+        return {
+            "exists": False,
+            "is_empty": True,
+            "message": "Repository not cloned locally. Please clone it first."
+        }
+
+    # Check if directory is empty or has minimal files
+    try:
+        all_files = list(repo_path.rglob('*'))
+        # Filter out .git directory files
+        code_files = [f for f in all_files if f.is_file() and '.git' not in f.parts]
+
+        # Define tech stack indicators
+        tech_indicators = [
+            'package.json', 'requirements.txt', 'pom.xml', 'build.gradle',
+            'Cargo.toml', 'go.mod', 'composer.json', 'Gemfile',
+            'setup.py', 'pyproject.toml', 'yarn.lock', 'package-lock.json'
+        ]
+
+        has_tech_stack = any(
+            any(indicator in str(f).lower() for indicator in tech_indicators)
+            for f in code_files
+        )
+
+        # Check for common code file extensions
+        code_extensions = ['.py', '.js', '.ts', '.java', '.go', '.rs', '.rb', '.php', '.cpp', '.c', '.cs']
+        has_code_files = any(f.suffix.lower() in code_extensions for f in code_files)
+
+        is_empty = len(code_files) == 0 or (len(code_files) <= 2 and not has_tech_stack and not has_code_files)
+
+        return {
+            "exists": True,
+            "is_empty": is_empty,
+            "file_count": len(code_files),
+            "has_tech_stack": has_tech_stack,
+            "has_code_files": has_code_files,
+            "message": "Repository is empty or has no recognizable tech stack" if is_empty else "Repository looks good"
+        }
+
+    except Exception as e:
+        logger.error(f"Error checking repository: {e}")
+        return {
+            "exists": True,
+            "is_empty": None,
+            "message": f"Error checking repository: {str(e)}"
+        }
+
 @app.post("/update-code-by-id")
 async def update_code_by_id(req: UpdateByIdRequest, current_user: dict = Depends(get_current_user)):
     """Queue a code update job for processing."""
