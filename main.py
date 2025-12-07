@@ -1307,6 +1307,100 @@ Examples of INVALID tech stacks:
             "message": "Validation service unavailable, proceeding"
         }
 
+class FetchBranchesRequest(BaseModel):
+    github_url: str
+    github_token: Optional[str] = None
+
+@app.post("/fetch-branches")
+async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends(get_current_user)):
+    """Fetch available branches from a GitHub repository."""
+    try:
+        import requests
+
+        # Extract owner and repo from GitHub URL
+        # Format: https://github.com/owner/repo or https://github.com/owner/repo.git
+        url_parts = req.github_url.rstrip('/').replace('.git', '').split('/')
+        if len(url_parts) < 2:
+            raise HTTPException(status_code=400, detail="Invalid GitHub URL")
+
+        owner = url_parts[-2]
+        repo = url_parts[-1]
+
+        # GitHub API endpoint for branches
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/branches"
+
+        # Set up headers
+        headers = {
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Aider-Repository-Manager'
+        }
+
+        # Add token if provided
+        if req.github_token:
+            headers['Authorization'] = f'token {req.github_token}'
+
+        # Fetch branches
+        response = requests.get(api_url, headers=headers, timeout=10)
+
+        if response.status_code == 404:
+            return {
+                "success": False,
+                "branches": [],
+                "message": "Repository not found or not accessible"
+            }
+
+        if response.status_code == 403:
+            return {
+                "success": False,
+                "branches": [],
+                "message": "Rate limit exceeded or insufficient permissions. Try adding a GitHub token."
+            }
+
+        if not response.ok:
+            return {
+                "success": False,
+                "branches": [],
+                "message": f"GitHub API error: {response.status_code}"
+            }
+
+        branches_data = response.json()
+        branch_names = [branch['name'] for branch in branches_data]
+
+        # Return branches with common ones first
+        common_branches = ['main', 'master', 'develop', 'development']
+        sorted_branches = []
+
+        # Add common branches first if they exist
+        for common in common_branches:
+            if common in branch_names:
+                sorted_branches.append(common)
+
+        # Add remaining branches
+        for branch in branch_names:
+            if branch not in sorted_branches:
+                sorted_branches.append(branch)
+
+        return {
+            "success": True,
+            "branches": sorted_branches,
+            "message": f"Found {len(sorted_branches)} branches"
+        }
+
+    except requests.RequestException as e:
+        logger.error(f"Error fetching branches: {e}")
+        return {
+            "success": False,
+            "branches": [],
+            "message": "Unable to connect to GitHub. Please check your internet connection."
+        }
+    except Exception as e:
+        logger.error(f"Error in fetch_branches: {e}")
+        return {
+            "success": False,
+            "branches": [],
+            "message": str(e)
+        }
+
 @app.post("/update-code-by-id")
 async def update_code_by_id(req: UpdateByIdRequest, current_user: dict = Depends(get_current_user)):
     """Queue a code update job for processing."""
