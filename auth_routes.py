@@ -26,50 +26,56 @@ class LoginResponse(BaseModel):
     user: Dict[str, Any]
     message: str = "Login successful"
 
+def create_or_update_user(user_info: Dict[str, Any]) -> User:
+    """Create or update user in database. Shared logic for all login flows."""
+    session = SessionLocal()
+
+    try:
+        db_user = session.query(User).filter(User.google_id == user_info['user_id']).first()
+
+        if db_user:
+            # Update existing user
+            db_user.email = user_info['email']
+            db_user.name = user_info['name']
+            db_user.picture_url = user_info['picture']
+            db_user.updated_at = datetime.utcnow()  # type: ignore
+        else:
+            # Create new user
+            db_user = User(
+                google_id=user_info['user_id'],
+                email=user_info['email'],
+                name=user_info['name'],
+                picture_url=user_info['picture'],
+                plan_type="free"
+            )
+            session.add(db_user)
+
+        session.commit()
+        session.refresh(db_user)
+        return db_user
+    finally:
+        session.close()
+
 @router.post("/google/login", response_model=LoginResponse)
 async def google_login(request: GoogleTokenRequest, response: Response):
-    """Login with Google OAuth2 token and set secure session cookie."""
+    """Login with Google OAuth2 token (popup flow) and set secure session cookie."""
     # Verify Google token
     user_info = oauth2_handler.verify_google_token(request.token)
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid Google token")
-    
-    # Use SQLAlchemy ORM directly
-    session = SessionLocal()
-    
-    # Try to find existing user
-    db_user = session.query(User).filter(User.google_id == user_info['user_id']).first()
-    
-    if db_user:
-        # Update existing user
-        db_user.email = user_info['email']
-        db_user.name = user_info['name']
-        db_user.picture_url = user_info['picture']
-        db_user.updated_at = datetime.utcnow()  # type: ignore
-    else:
-        # Create new user
-        db_user = User(
-            google_id=user_info['user_id'],
-            email=user_info['email'],
-            name=user_info['name'],
-            picture_url=user_info['picture'],
-            plan_type="free"
-        )
-        session.add(db_user)
-    
-    session.commit()
-    session.refresh(db_user)
-    session.close()
-    
+
+    # Create or update user (shared logic)
+    db_user = create_or_update_user(user_info)
+
     # Convert to dict
     user_dict = {c.name: getattr(db_user, c.name) for c in db_user.__table__.columns}
-    
+
     # Generate JWT access token and set as HTTP-only cookie
     access_token = oauth2_handler.create_access_token(user_info)
-    
+
     # Determine if we are in production
     is_production = os.getenv("ENVIRONMENT", "development") == "production"
-    
+
     response.set_cookie(
         key="access_token",
         value=access_token,
@@ -78,7 +84,7 @@ async def google_login(request: GoogleTokenRequest, response: Response):
         samesite="lax",     # CSRF protection
         max_age=86400       # 24 hours
     )
-    
+
     return LoginResponse(
         user=user_dict,
         message="Login successful"
@@ -86,54 +92,30 @@ async def google_login(request: GoogleTokenRequest, response: Response):
 
 @router.get("/google/callback")
 async def google_callback(request: Request, code: str, state: Optional[str] = None):
-    """Handle Google OAuth2 callback."""
+    """Handle Google OAuth2 callback (redirect flow)."""
     # Dynamically construct redirect_uri based on the request host
-    # This ensures it matches what the frontend used (window.location.origin)
     base_url = str(request.base_url).rstrip('/')
     redirect_uri = f"{base_url}/auth/google/callback"
-    
-    # Fallback to env var if needed (though dynamic is better for localhost/127.0.0.1 support)
-    # redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
-    
+
     # Exchange code for tokens
     token_data = oauth2_handler.exchange_code(code, redirect_uri)
     if not token_data or 'id_token' not in token_data:
         raise HTTPException(status_code=400, detail="Failed to exchange code for tokens")
-    
+
     # Verify ID token
     user_info = oauth2_handler.verify_google_token(token_data['id_token'])
     if not user_info:
         raise HTTPException(status_code=400, detail="Invalid ID token")
-        
-    # Create/Update user
-    session = SessionLocal()
-    db_user = session.query(User).filter(User.google_id == user_info['user_id']).first()
-    
-    if db_user:
-        db_user.email = user_info['email']
-        db_user.name = user_info['name']
-        db_user.picture_url = user_info['picture']
-        db_user.updated_at = datetime.utcnow()  # type: ignore
-    else:
-        db_user = User(
-            google_id=user_info['user_id'],
-            email=user_info['email'],
-            name=user_info['name'],
-            picture_url=user_info['picture'],
-            plan_type="free"
-        )
-        session.add(db_user)
-    
-    session.commit()
-    session.refresh(db_user)
-    session.close()
-    
+
+    # Create or update user (shared logic)
+    create_or_update_user(user_info)
+
     # Generate JWT and set cookie
     access_token = oauth2_handler.create_access_token(user_info)
-    
+
     # Determine if we are in production
     is_production = os.getenv("ENVIRONMENT", "development") == "production"
-    
+
     response = RedirectResponse(url="/dashboard")
     response.set_cookie(
         key="access_token",
@@ -143,7 +125,7 @@ async def google_callback(request: Request, code: str, state: Optional[str] = No
         samesite="lax",
         max_age=86400
     )
-    
+
     return response
 
 @router.get("/me")
