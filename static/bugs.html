@@ -235,6 +235,20 @@
     <script>
         const ADMIN_EMAILS = ["novusmundus2025@gmail.com", "batalladavid1984@gmail.com"];
 
+        // Add ripple animation delay to nav links
+        document.addEventListener('DOMContentLoaded', () => {
+            const navLinks = document.querySelectorAll('.nav-links a');
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    const href = this.getAttribute('href');
+                    if (href && href !== '#' && !href.startsWith('javascript:')) {
+                        e.preventDefault();
+                        setTimeout(() => { window.location.href = href; }, 600);
+                    }
+                });
+            });
+        });
+
         // Check Admin Access
         async function checkAccess() {
             try {

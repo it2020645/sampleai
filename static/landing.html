@@ -506,15 +506,31 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
+            // Add ripple animation delay to nav links
+            const navLinks = document.querySelectorAll('.nav-links a');
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    const href = this.getAttribute('href');
+                    // Only delay if it's an actual navigation (not # or javascript:)
+                    if (href && href !== '#' && !href.startsWith('javascript:')) {
+                        e.preventDefault();
+                        // Wait for ripple animation to complete (600ms)
+                        setTimeout(() => {
+                            window.location.href = href;
+                        }, 600);
+                    }
+                });
+            });
+
             try {
                 console.log('Checking auth status...');
                 const response = await fetch('/auth/me', { credentials: 'include' });
                 console.log('Auth response status:', response.status);
-                
+
                 if (response.ok) {
                     const data = await response.json();
                     console.log('User logged in:', data.user.email);
-                    
+
                     // Update Nav Buttons
                     const authButtons = document.getElementById('auth-buttons');
                     if (authButtons) {
