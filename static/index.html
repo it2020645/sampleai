@@ -1587,6 +1587,10 @@
                 branchSelect.innerHTML = '<option value="">Loading branches...</option>';
                 branchSelect.disabled = true;
 
+                // Debug: Log what we're sending
+                console.log('🔍 Fetching branches for URL:', githubUrl);
+                console.log('🔍 GitHub Token provided:', githubToken ? 'Yes' : 'No');
+
                 const response = await fetch(`${API_BASE}/fetch-branches`, {
                     method: 'POST',
                     headers: {

@@ -1317,6 +1317,10 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
     try:
         import requests
 
+        # Debug logging
+        logger.info(f"🔍 fetch_branches called with URL: {req.github_url}")
+        logger.info(f"🔍 Token provided: {'Yes' if req.github_token else 'No'}")
+
         # Extract owner and repo from GitHub URL
         # Format: https://github.com/owner/repo or https://github.com/owner/repo.git
         url_parts = req.github_url.rstrip('/').replace('.git', '').split('/')
@@ -1325,6 +1329,8 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
 
         owner = url_parts[-2]
         repo = url_parts[-1]
+
+        logger.info(f"🔍 Parsed owner: {owner}, repo: {repo}")
 
         # Set up headers
         headers = {
