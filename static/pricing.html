@@ -521,7 +521,7 @@
     <div class="pricing-grid">
         <!-- Free Plan -->
         <div class="pricing-card">
-            <div class="plan-name">NERDY ACCESS</div>
+            <div class="plan-name">COFFEE-LOADED MODE</div>
             <div class="price">$0<span>/mo</span></div>
             <ul class="features-list">
                 <li>1 Repository</li>
@@ -535,7 +535,7 @@
         <!-- Pro Plan -->
         <div class="pricing-card popular">
             <div class="badge">RECOMMENDED</div>
-            <div class="plan-name">SLEEP IS FOR THE WEAK</div>
+            <div class="plan-name">SLEEP-DEPRIVED</div>
             <div class="price">$399<span>/mo</span></div>
             <ul class="features-list">
                 <li>Unlimited Repositories</li>
@@ -549,7 +549,7 @@
 
         <!-- Enterprise Plan -->
         <div class="pricing-card">
-            <div class="plan-name">INSOMNIA</div>
+            <div class="plan-name">INSOMNIAC</div>
             <div class="price">Custom</div>
             <ul class="features-list">
                 <li>High-Volume Story Execution</li>
@@ -652,9 +652,9 @@
                 if (response.ok) {
                     const result = await response.json();
                     const planNames = {
-                        'free': 'NERDY ACCESS',
-                        'pro': 'SLEEP IS FOR THE WEAK',
-                        'enterprise': 'INSOMNIA'
+                        'free': 'COFFEE-LOADED MODE',
+                        'pro': 'SLEEP-DEPRIVED',
+                        'enterprise': 'INSOMNIAC'
                     };
                     showModal(
                         'success',
