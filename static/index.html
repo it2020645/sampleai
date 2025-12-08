@@ -765,8 +765,23 @@
         
         <div class="main-content">
             <!-- Add Repository Form -->
-            <div class="card">
-                <h2>➕ Add Repository</h2>
+            <div class="card" id="add-repo-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;">➕ Add Repository</h2>
+                    <button id="toggle-add-repo" onclick="toggleAddRepoForm()" style="
+                        background: rgba(0, 168, 255, 0.1);
+                        border: 1px solid var(--primary);
+                        color: var(--primary);
+                        padding: 5px 15px;
+                        cursor: pointer;
+                        font-family: 'JetBrains Mono';
+                        font-size: 0.85rem;
+                        transition: all 0.3s;
+                        clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+                    " onmouseover="this.style.background='rgba(0, 168, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 168, 255, 0.1)'">
+                        <span id="toggle-icon">▼</span> MINIMIZE
+                    </button>
+                </div>
                 <form id="add-repo-form">
                     <div class="form-group">
                         <label for="github-url">GitHub URL *</label>
@@ -1255,31 +1270,46 @@
             const loadingDiv = document.getElementById('repos-loading');
             const repoList = document.getElementById('repo-list');
             const repoSelect = document.getElementById('repo-select');
-            
+
             loadingDiv.style.display = 'block';
             repoList.innerHTML = '';
             repoSelect.innerHTML = '<option value="">Choose a repository...</option>';
-            
+
             try {
                 const response = await fetch(`${API_BASE}/repositories`, {
                     credentials: 'include'
                 });
-                
+
                 if (response.ok) {
                     const repos = await response.json();
-                    
+
+                    // Auto-expand/collapse Add Repository form based on repos count
+                    const addRepoForm = document.getElementById('add-repo-form');
+                    const toggleBtn = document.getElementById('toggle-add-repo');
+                    const toggleIcon = document.getElementById('toggle-icon');
+
+                    if (repos.length === 0) {
+                        // No repos - expand the form for new users
+                        addRepoForm.style.display = 'block';
+                        toggleBtn.innerHTML = '<span id="toggle-icon">▼</span> MINIMIZE';
+                    } else {
+                        // Has repos - minimize the form
+                        addRepoForm.style.display = 'none';
+                        toggleBtn.innerHTML = '<span id="toggle-icon">▶</span> EXPAND';
+                    }
+
                     repos.forEach(repo => {
                         // Add to list
                         const repoItem = createRepoItem(repo);
                         repoList.appendChild(repoItem);
-                        
+
                         // Add to select
                         const option = document.createElement('option');
                         option.value = repo.id;
                         option.textContent = `${repo.name} (${repo.owner})`;
                         repoSelect.appendChild(option);
                     });
-                    
+
                     if (repos.length === 0) {
                         repoList.innerHTML = '<p style="text-align: center; color: #cccccc;">No repositories found. Add one above!</p>';
                     }
@@ -1418,6 +1448,22 @@
                 statusDiv.innerHTML = statusHtml;
             } else {
                 statusDiv.innerHTML = '<p style="color: #ff6b6b;">❌ Could not fetch CI/CD status. Check if GitHub token is configured and has proper permissions.</p>';
+            }
+        }
+
+        // Toggle Add Repository form
+        function toggleAddRepoForm() {
+            const addRepoForm = document.getElementById('add-repo-form');
+            const toggleBtn = document.getElementById('toggle-add-repo');
+
+            if (addRepoForm.style.display === 'none') {
+                // Expand
+                addRepoForm.style.display = 'block';
+                toggleBtn.innerHTML = '<span id="toggle-icon">▼</span> MINIMIZE';
+            } else {
+                // Minimize
+                addRepoForm.style.display = 'none';
+                toggleBtn.innerHTML = '<span id="toggle-icon">▶</span> EXPAND';
             }
         }
 
