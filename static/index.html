@@ -1604,6 +1604,7 @@
                 // Debug logging
                 console.log('Branch fetch result:', result);
                 console.log('Branches received:', result.branches);
+                console.log('Default branch from GitHub:', result.default_branch);
 
                 if (result.success && result.branches && result.branches.length > 0) {
                     // Populate branches
@@ -1611,16 +1612,19 @@
                     result.branches.forEach(branch => {
                         const option = document.createElement('option');
                         option.value = branch;
-                        option.textContent = branch;
-                        // Select default, main, or master by priority
-                        if (branch === 'default' ||
-                            (branch === 'main' && !result.branches.includes('default')) ||
-                            (branch === 'master' && !result.branches.includes('default') && !result.branches.includes('main'))) {
+
+                        // Add indicator for default branch
+                        if (branch === result.default_branch) {
+                            option.textContent = `${branch} (default)`;
                             option.selected = true;
+                        } else {
+                            option.textContent = branch;
                         }
+
                         branchSelect.appendChild(option);
                     });
                     console.log(`✓ Loaded ${result.branches.length} branches successfully`);
+                    console.log(`✓ Default branch: ${result.default_branch}`);
                 } else {
                     // Fallback to default branches
                     console.warn('Falling back to default branches. Reason:', result.message || 'No branches returned');

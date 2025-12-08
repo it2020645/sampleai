@@ -1313,7 +1313,7 @@ class FetchBranchesRequest(BaseModel):
 
 @app.post("/fetch-branches")
 async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends(get_current_user)):
-    """Fetch available branches from a GitHub repository."""
+    """Fetch available branches from a GitHub repository and detect the default branch."""
     try:
         import requests
 
@@ -1326,9 +1326,6 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
         owner = url_parts[-2]
         repo = url_parts[-1]
 
-        # GitHub API endpoint for branches
-        api_url = f"https://api.github.com/repos/{owner}/{repo}/branches"
-
         # Set up headers
         headers = {
             'Accept': 'application/vnd.github.v3+json',
@@ -1339,6 +1336,18 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
         if req.github_token:
             headers['Authorization'] = f'token {req.github_token}'
 
+        # First, fetch repository info to get the default branch
+        repo_info_url = f"https://api.github.com/repos/{owner}/{repo}"
+        repo_response = requests.get(repo_info_url, headers=headers, timeout=10)
+
+        default_branch = None
+        if repo_response.ok:
+            repo_data = repo_response.json()
+            default_branch = repo_data.get('default_branch')
+
+        # GitHub API endpoint for branches
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/branches"
+
         # Fetch branches
         response = requests.get(api_url, headers=headers, timeout=10)
 
@@ -1346,6 +1355,7 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
             return {
                 "success": False,
                 "branches": [],
+                "default_branch": None,
                 "message": "Repository not found or not accessible"
             }
 
@@ -1353,6 +1363,7 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
             return {
                 "success": False,
                 "branches": [],
+                "default_branch": None,
                 "message": "Rate limit exceeded or insufficient permissions. Try adding a GitHub token."
             }
 
@@ -1360,19 +1371,24 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
             return {
                 "success": False,
                 "branches": [],
+                "default_branch": None,
                 "message": f"GitHub API error: {response.status_code}"
             }
 
         branches_data = response.json()
         branch_names = [branch['name'] for branch in branches_data]
 
-        # Return branches with common ones first
-        common_branches = ['default', 'main', 'master', 'develop', 'development']
+        # Return branches with the default branch first, then common ones
         sorted_branches = []
 
-        # Add common branches first if they exist
+        # Add default branch first if it exists
+        if default_branch and default_branch in branch_names:
+            sorted_branches.append(default_branch)
+
+        # Add other common branches
+        common_branches = ['main', 'master', 'develop', 'development']
         for common in common_branches:
-            if common in branch_names:
+            if common in branch_names and common not in sorted_branches:
                 sorted_branches.append(common)
 
         # Add remaining branches
@@ -1383,6 +1399,7 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
         return {
             "success": True,
             "branches": sorted_branches,
+            "default_branch": default_branch,
             "message": f"Found {len(sorted_branches)} branches"
         }
 
