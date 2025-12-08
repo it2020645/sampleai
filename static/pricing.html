@@ -521,7 +521,7 @@
     <div class="pricing-grid">
         <!-- Free Plan -->
         <div class="pricing-card">
-            <div class="plan-name">MARK I</div>
+            <div class="plan-name">NERDY ACCESS</div>
             <div class="price">$0<span>/mo</span></div>
             <ul class="features-list">
                 <li>1 Repository</li>
@@ -535,7 +535,7 @@
         <!-- Pro Plan -->
         <div class="pricing-card popular">
             <div class="badge">RECOMMENDED</div>
-            <div class="plan-name">MARK V</div>
+            <div class="plan-name">SLEEP IS FOR THE WEAK</div>
             <div class="price">$399<span>/mo</span></div>
             <ul class="features-list">
                 <li>Unlimited Repositories</li>
@@ -544,12 +544,12 @@
                 <li>Priority Processing</li>
                 <li>Automated PR Reviews</li>
             </ul>
-            <button class="btn-plan" onclick="selectPlan('pro')">UPGRADE ARMOR</button>
+            <button class="btn-plan" onclick="selectPlan('pro')">UPGRADE</button>
         </div>
 
         <!-- Enterprise Plan -->
         <div class="pricing-card">
-            <div class="plan-name">HULKBUSTER</div>
+            <div class="plan-name">INSOMNIA</div>
             <div class="price">Custom</div>
             <ul class="features-list">
                 <li>High-Volume Story Execution</li>
@@ -558,7 +558,7 @@
                 <li>Dedicated Support Manager</li>
                 <li>SLA Guarantees</li>
             </ul>
-            <button class="btn-plan" onclick="window.location.href='/help'">CONTACT STARK IND.</button>
+            <button class="btn-plan" onclick="window.location.href='/help'">CONTACT US</button>
         </div>
     </div>
 
@@ -651,11 +651,16 @@
 
                 if (response.ok) {
                     const result = await response.json();
+                    const planNames = {
+                        'free': 'NERDY ACCESS',
+                        'pro': 'SLEEP IS FOR THE WEAK',
+                        'enterprise': 'INSOMNIA'
+                    };
                     showModal(
                         'success',
                         '✓',
                         'Plan Activated',
-                        `Successfully upgraded to ${planType.toUpperCase()} armor suit!`,
+                        `Successfully activated ${planNames[planType]} level!`,
                         'Access Dashboard',
                         () => { window.location.href = '/dashboard'; }
                     );
