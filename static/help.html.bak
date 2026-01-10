@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Help & FAQ - Aider AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #00a8ff;
+            --secondary: #d4af37;
+            --bg-dark: #050505;
+            --bg-panel: rgba(10, 20, 30, 0.85);
+            --text-main: #e0f0ff;
+            --text-muted: #647c90;
+            --border-tech: 1px solid rgba(0, 168, 255, 0.3);
+            --glow-blue: 0 0 10px rgba(0, 168, 255, 0.5);
+            --glow-gold: 0 0 10px rgba(212, 175, 55, 0.5);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            line-height: 1.6;
+            background-image: 
+                linear-gradient(rgba(0, 168, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 168, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            overflow-x: hidden;
+        }
+
+        /* HUD Overlay */
+        .hud-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 9999;
+            background: radial-gradient(circle at center, transparent 60%, rgba(0, 0, 0, 0.4) 100%);
+            box-shadow: inset 0 0 50px rgba(0, 168, 255, 0.1);
+        }
+
+        nav {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 20px 50px; backdrop-filter: blur(10px);
+            border-bottom: var(--border-tech);
+            background: rgba(5, 5, 10, 0.8);
+            position: sticky; top: 0; z-index: 100;
+        }
+
+        .logo {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem; font-weight: 700;
+            color: var(--primary);
+            text-shadow: var(--glow-blue);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: none;
+            -webkit-text-fill-color: var(--primary);
+        }
+
+        .nav-links { display: flex; gap: 30px; }
+        .nav-links a { 
+            color: var(--text-muted); text-decoration: none; transition: all 0.3s;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .nav-links a:hover { color: var(--primary); text-shadow: var(--glow-blue); }
+
+        .btn-nav {
+            display: inline-block;
+            padding: 8px 20px; font-size: 0.9rem; font-weight: 600;
+            text-decoration: none; transition: all 0.3s;
+            font-family: 'JetBrains Mono', monospace;
+            border-radius: 0;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+        }
+        .btn-login { 
+            color: var(--primary); border: 1px solid var(--primary); margin-right: 10px; 
+            background: rgba(0, 168, 255, 0.05);
+        }
+        .btn-login:hover { background: rgba(0, 168, 255, 0.15); }
+        
+        .btn-primary {
+            background: var(--primary); color: #000; border: none;
+            font-weight: bold;
+        }
+        .btn-primary:hover { 
+            background: #33bfff;
+        }
+
+        /* Help Content */
+        .container { max-width: 800px; margin: 0 auto; padding: 80px 20px; }
+        
+        .header { text-align: center; margin-bottom: 60px; }
+        .header h1 { 
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 3rem; margin-bottom: 15px; 
+            color: var(--primary); text-shadow: var(--glow-blue);
+            text-transform: uppercase; letter-spacing: 2px;
+        }
+        .header p { color: var(--text-muted); font-size: 1.1rem; }
+
+        .faq-item {
+            background: var(--bg-panel); border: var(--border-tech);
+            margin-bottom: 20px; overflow: hidden;
+            border-radius: 0;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            transition: all 0.3s;
+        }
+        .faq-item:hover {
+            box-shadow: var(--glow-blue);
+            border-color: var(--primary);
+        }
+
+        .faq-question {
+            padding: 25px; cursor: pointer; display: flex; justify-content: space-between;
+            align-items: center; font-weight: 600; font-size: 1.1rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-main);
+        }
+
+        .faq-question:hover { background: rgba(0, 168, 255, 0.05); }
+
+        .faq-answer {
+            padding: 0 25px; max-height: 0; overflow: hidden;
+            transition: max-height 0.3s ease-out, padding 0.3s ease;
+            color: var(--text-muted);
+            border-top: 1px solid transparent;
+        }
+
+        .faq-item.active .faq-answer {
+            padding: 0 25px 25px; max-height: 500px;
+            border-top: 1px solid rgba(0, 168, 255, 0.1);
+        }
+
+        .faq-item.active .faq-question { color: var(--primary); text-shadow: var(--glow-blue); }
+        
+        .icon { transition: transform 0.3s; color: var(--primary); }
+        .faq-item.active .icon { transform: rotate(180deg); }
+
+        .contact-section {
+            text-align: center; margin-top: 80px; padding: 40px;
+            background: linear-gradient(135deg, rgba(0, 168, 255, 0.05), rgba(212, 175, 55, 0.05));
+            border: var(--border-tech);
+            border-radius: 0;
+            clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+        }
+
+        /* KALIX Button Animations */
+        .btn-nav, .btn-primary, .btn-login {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            z-index: 1;
+        }
+
+        /* Scanline effect */
+        .btn-nav::after, .btn-primary::after, .btn-login::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -150%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            transform: skewX(-20deg);
+            transition: none;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .btn-nav:hover::after, .btn-primary:hover::after, .btn-login:hover::after {
+            left: 150%;
+            transition: left 0.6s ease-in-out;
+        }
+
+        /* Glow and Lift */
+        .btn-nav:hover, .btn-primary:hover, .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 15px var(--primary);
+            text-shadow: 0 0 5px #fff;
+        }
+
+        /* Click Press */
+        .btn-nav:active, .btn-primary:active, .btn-login:active {
+            transform: scale(0.95) translateY(0);
+            box-shadow: 0 0 5px var(--primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="hud-overlay"></div>
+
+    <nav>
+        <a href="/" class="logo">KALIX</a>
+        <div class="nav-links">
+            <a href="/">HOME</a>
+            <a href="/pricing">PRICING</a>
+            <a href="/help" style="color: var(--primary);">SYSTEM HELP</a>
+        </div>
+        <div id="auth-buttons">
+            <a href="/login.html" class="btn-nav btn-primary">LOGIN</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h1>PROTOCOL ASSISTANCE</h1>
+            <p>Accessing KALIX knowledge base for system inquiries.</p>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">
+                WHAT IS KALIX?
+                <span class="icon">▼</span>
+            </div>
+            <div class="faq-answer">
+                KALIX (Knowledge-Adaptive Learning & Information eXchange) is an autonomous coding agent. It can edit code, manage git repositories, and execute complex protocols based on your command.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">
+                IS MY DATA SECURE?
+                <span class="icon">▼</span>
+            </div>
+            <div class="faq-answer">
+                Affirmative. Security protocols are paramount. We do not train models on your private code without explicit authorization.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">
+                DO I NEED AN API KEY?
+                <span class="icon">▼</span>
+            </div>
+            <div class="faq-answer">
+                For self-hosted instances, yes. For the MARK V cloud plan, models are included in your subscription.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-question">
+                CAN IT WORK WITH LEGACY SYSTEMS?
+                <span class="icon">▼</span>
+            </div>
+            <div class="faq-answer">
+                Absolutely. KALIX is designed to interface with existing repositories, analyze context, and begin contributing immediately.
+            </div>
+        </div>
+
+        <div class="contact-section">
+            <h2 style="font-family: 'JetBrains Mono'; color: var(--primary);">FURTHER ASSISTANCE REQUIRED?</h2>
+            <p style="margin: 15px 0 25px; color: var(--text-muted);">Support protocols are standing by.</p>
+            <a href="mailto:support@aider.ai" class="btn-nav btn-primary">CONTACT STARK IND.</a>
+        </div>
+    </div>
+
+    <script>
+        document.querySelectorAll('.faq-question').forEach(item => {
+            item.addEventListener('click', () => {
+                const parent = item.parentElement;
+                parent.classList.toggle('active');
+            });
+        });
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                console.log('Checking auth status on Help page...');
+                const response = await fetch('/auth/me', { credentials: 'include' });
+                console.log('Auth response status:', response.status);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('User logged in:', data.user.email);
+                    
+                    // Update Nav Buttons
+                    const authButtons = document.getElementById('auth-buttons');
+                    if (authButtons) {
+                        authButtons.innerHTML = `
+                            <a href="/dashboard" class="btn-nav btn-primary">DASHBOARD</a>
+                            <a href="#" onclick="logout()" class="btn-nav btn-login">DISENGAGE</a>
+                        `;
+                    }
+                } else {
+                    console.log('User not logged in');
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+            }
+        });
+
+        async function logout() {
+            try {
+                await fetch('/auth/logout', { method: 'POST' });
+                window.location.reload();
+            } catch (error) {
+                console.error('Logout failed:', error);
+            }
+        }
+    </script>
+</body>
+</html>

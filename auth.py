@@ -1,5 +1,9 @@
 import os
-import jwt
+import json
+import base64
+import hmac
+import hashlib
+import time
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, Depends, Request, Header
@@ -7,6 +11,86 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from google.auth.transport import requests
 from google.oauth2 import id_token
 import logging
+
+# Minimal JWT fallback (HS256 only) to avoid external dependency installs
+class ExpiredSignatureError(Exception):
+    pass
+
+
+class InvalidTokenError(Exception):
+    pass
+
+
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _b64url_decode(data: str) -> bytes:
+    padding = '=' * (-len(data) % 4)
+    return base64.urlsafe_b64decode(data + padding)
+
+
+def _ensure_ts(value):
+    if isinstance(value, datetime):
+        return int(value.timestamp())
+    return value
+
+
+def _jwt_encode(payload: Dict[str, Any], secret: str, algorithm: str = "HS256") -> str:
+    if algorithm != "HS256":
+        raise InvalidTokenError("Unsupported algorithm")
+    header = {"alg": "HS256", "typ": "JWT"}
+    safe_payload = {k: _ensure_ts(v) for k, v in payload.items()}
+    header_b64 = _b64url_encode(json.dumps(header, separators=(',', ':')).encode("utf-8"))
+    payload_b64 = _b64url_encode(json.dumps(safe_payload, separators=(',', ':')).encode("utf-8"))
+    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
+    signature = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    signature_b64 = _b64url_encode(signature)
+    return f"{header_b64}.{payload_b64}.{signature_b64}"
+
+
+def _jwt_decode(token: str, secret: str, algorithms: Optional[list] = None) -> Dict[str, Any]:
+    if algorithms and "HS256" not in algorithms:
+        raise InvalidTokenError("Unsupported algorithm")
+    parts = token.split('.')
+    if len(parts) != 3:
+        raise InvalidTokenError("Invalid token format")
+    header_b64, payload_b64, signature_b64 = parts
+    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
+    expected_sig = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    try:
+        provided_sig = _b64url_decode(signature_b64)
+    except Exception as exc:  # pragma: no cover - defensive
+        raise InvalidTokenError(f"Bad signature: {exc}")
+    if not hmac.compare_digest(expected_sig, provided_sig):
+        raise InvalidTokenError("Signature verification failed")
+    try:
+        payload = json.loads(_b64url_decode(payload_b64))
+    except Exception as exc:  # pragma: no cover - defensive
+        raise InvalidTokenError(f"Bad payload: {exc}")
+    exp = payload.get("exp")
+    if exp is not None and time.time() > exp:
+        raise ExpiredSignatureError("Token expired")
+    return payload
+
+
+try:  # Prefer real PyJWT if installed
+    import jwt as pyjwt  # type: ignore
+    jwt = pyjwt
+except ImportError:  # Fallback minimal implementation
+    class _MiniJWT:
+        ExpiredSignatureError = ExpiredSignatureError
+        InvalidTokenError = InvalidTokenError
+
+        @staticmethod
+        def encode(payload: Dict[str, Any], secret: str, algorithm: str = "HS256") -> str:
+            return _jwt_encode(payload, secret, algorithm)
+
+        @staticmethod
+        def decode(token: str, secret: str, algorithms: Optional[list] = None, options: Optional[dict] = None) -> Dict[str, Any]:
+            return _jwt_decode(token, secret, algorithms)
+
+    jwt = _MiniJWT()
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +131,14 @@ class GoogleOAuth2:
     
     def create_access_token(self, user_info: Dict[str, Any], expires_hours: int = 24) -> str:
         """Create a JWT access token for the user."""
+        now = datetime.utcnow()
+        exp_ts = int((now + timedelta(hours=expires_hours)).timestamp())
         payload = {
             'user_id': user_info['user_id'],
             'email': user_info['email'],
             'name': user_info['name'],
-            'exp': datetime.utcnow() + timedelta(hours=expires_hours),
-            'iat': datetime.utcnow(),
+            'exp': exp_ts,
+            'iat': int(now.timestamp()),
             'type': 'access_token'
         }
         return jwt.encode(payload, self.jwt_secret, algorithm='HS256')
@@ -61,11 +147,6 @@ class GoogleOAuth2:
         """Verify JWT access token and return user info."""
         try:
             payload = jwt.decode(token, self.jwt_secret, algorithms=['HS256'])
-            
-            # Check if token is expired
-            if datetime.fromtimestamp(payload['exp']) < datetime.utcnow():
-                return None
-                
             return payload
         except jwt.ExpiredSignatureError:
             logger.warning("Access token expired")

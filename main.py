@@ -1197,7 +1197,8 @@ async def check_repository_status(repo_id: int, current_user: dict = Depends(get
         code_extensions = ['.py', '.js', '.ts', '.java', '.go', '.rs', '.rb', '.php', '.cpp', '.c', '.cs']
         has_code_files = any(f.suffix.lower() in code_extensions for f in code_files)
 
-        is_empty = len(code_files) == 0 or (len(code_files) <= 2 and not has_tech_stack and not has_code_files)
+        # A repo is empty only if it has NO code files AND NO tech stack indicators
+        is_empty = not has_code_files and not has_tech_stack
 
         return {
             "exists": True,
