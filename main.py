@@ -137,7 +137,7 @@ class RepositoryRequest(BaseModel):
     github_url: str
     owner: str
     branch: str = "master"
-    github_token: Optional[str] = None
+    github_token: str  # Required for authentication
     local_path: Optional[str] = None
     description: Optional[str] = None
 
@@ -1308,30 +1308,193 @@ Examples of INVALID tech stacks:
             "message": "Validation service unavailable, proceeding"
         }
 
+@app.post("/detect-techstack")
+async def detect_tech_stack(req: FetchBranchesRequest, current_user: dict = Depends(get_current_user)):
+    """Auto-detect tech stack from repository by analyzing config files."""
+    try:
+        import requests
+        import re
+        
+        logger.info(f"🔍 detect_techstack called for repo: {req.github_url}")
+        
+        # Extract owner/repo from GitHub URL
+        clean_url = req.github_url.strip().rstrip('/').replace('.git', '')
+        url_parts = clean_url.split('/')
+        
+        if len(url_parts) < 5 or 'github.com' not in clean_url:
+            logger.error(f"❌ Invalid GitHub URL format")
+            return {
+                "detected": False,
+                "tech_stack": None,
+                "message": "Could not analyze repository"
+            }
+        
+        owner = url_parts[-2]
+        repo = url_parts[-1]
+        
+        # Set up headers
+        headers = {
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Aider-Repository-Manager'
+        }
+        
+        if req.github_token:
+            headers['Authorization'] = f'token {req.github_token}'
+        
+        # Try to fetch repository contents to detect tech stack
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/contents"
+        
+        try:
+            response = requests.get(api_url, headers=headers, timeout=10)
+        except requests.Timeout:
+            logger.error(f"⏱️ Timeout fetching repository contents")
+            return {
+                "detected": False,
+                "tech_stack": None,
+                "message": "Timeout analyzing repository"
+            }
+        
+        if not response.ok:
+            logger.warning(f"⚠️ Could not fetch repository contents (status {response.status_code})")
+            return {
+                "detected": False,
+                "tech_stack": None,
+                "message": "Could not analyze repository"
+            }
+        
+        contents = response.json()
+        if not isinstance(contents, list):
+            return {
+                "detected": False,
+                "tech_stack": None,
+                "message": "Repository appears empty"
+            }
+        
+        # Extract file names from repository root
+        file_names = [item.get('name', '') for item in contents if item.get('type') == 'file']
+        
+        logger.info(f"📁 Found files: {file_names}")
+        
+        # Detect tech stack based on files present
+        detected_techs = set()
+        
+        # Python detection
+        if any(f in file_names for f in ['requirements.txt', 'setup.py', 'pyproject.toml', 'Pipfile', 'poetry.lock']):
+            detected_techs.add('Python')
+        
+        # Node.js/JavaScript detection
+        if any(f in file_names for f in ['package.json', 'package-lock.json', 'yarn.lock']):
+            detected_techs.add('Node.js')
+        
+        # Java detection
+        if any(f in file_names for f in ['pom.xml', 'build.gradle', 'gradlew']):
+            detected_techs.add('Java')
+        
+        # Go detection
+        if any(f in file_names for f in ['go.mod', 'go.sum']):
+            detected_techs.add('Go')
+        
+        # Rust detection
+        if any(f in file_names for f in ['Cargo.toml', 'Cargo.lock']):
+            detected_techs.add('Rust')
+        
+        # PHP detection
+        if any(f in file_names for f in ['composer.json', 'composer.lock']):
+            detected_techs.add('PHP')
+        
+        # Ruby detection
+        if any(f in file_names for f in ['Gemfile', 'Gemfile.lock']):
+            detected_techs.add('Ruby')
+        
+        # C# / .NET detection
+        if any(f in file_names for f in ['.csproj', '.sln', 'packages.config']):
+            detected_techs.add('.NET')
+        
+        # Docker detection (indicates containerized project)
+        if 'Dockerfile' in file_names:
+            detected_techs.add('Docker')
+        
+        if detected_techs:
+            tech_stack = ', '.join(sorted(detected_techs))
+            logger.info(f"✅ Detected tech stack: {tech_stack}")
+            return {
+                "detected": True,
+                "tech_stack": tech_stack,
+                "message": f"Detected: {tech_stack}"
+            }
+        else:
+            logger.warning(f"⚠️ Could not detect specific tech stack")
+            return {
+                "detected": False,
+                "tech_stack": None,
+                "message": "Could not automatically detect tech stack. Please specify manually."
+            }
+    
+    except Exception as e:
+        logger.error(f"❌ Error detecting tech stack: {e}", exc_info=True)
+        return {
+            "detected": False,
+            "tech_stack": None,
+            "message": "Error analyzing repository"
+        }
+
 class FetchBranchesRequest(BaseModel):
     github_url: str
     github_token: Optional[str] = None
 
 @app.post("/fetch-branches")
-async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends(get_current_user)):
-    """Fetch available branches from a GitHub repository and detect the default branch."""
+async def fetch_branches(req: FetchBranchesRequest):
+    """Fetch available branches from a GitHub repository and detect the default branch.
+    
+    Note: Public endpoint (no auth required) since GitHub API is public.
+    """
     try:
         import requests
 
         # Debug logging
         logger.info(f"🔍 fetch_branches called with URL: {req.github_url}")
         logger.info(f"🔍 Token provided: {'Yes' if req.github_token else 'No'}")
+        
+        # Validate URL format
+        if not req.github_url or not isinstance(req.github_url, str):
+            logger.error(f"❌ Invalid github_url type or empty: {type(req.github_url)}")
+            return {
+                "success": False,
+                "branches": [],
+                "default_branch": None,
+                "message": "GitHub URL is required and must be a string"
+            }
 
         # Extract owner and repo from GitHub URL
         # Format: https://github.com/owner/repo or https://github.com/owner/repo.git
-        url_parts = req.github_url.rstrip('/').replace('.git', '').split('/')
-        if len(url_parts) < 2:
-            raise HTTPException(status_code=400, detail="Invalid GitHub URL")
+        clean_url = req.github_url.strip().rstrip('/').replace('.git', '')
+        logger.info(f"🔍 Clean URL: {clean_url}")
+        
+        url_parts = clean_url.split('/')
+        logger.info(f"🔍 URL parts: {url_parts}")
+        
+        if len(url_parts) < 5 or 'github.com' not in clean_url:
+            logger.error(f"❌ Invalid GitHub URL format: {req.github_url}")
+            return {
+                "success": False,
+                "branches": [],
+                "default_branch": None,
+                "message": "Invalid GitHub URL format. Expected: https://github.com/owner/repo or https://github.com/owner/repo.git"
+            }
 
         owner = url_parts[-2]
         repo = url_parts[-1]
+        
+        if not owner or not repo:
+            logger.error(f"❌ Could not parse owner/repo from URL parts: owner={owner}, repo={repo}")
+            return {
+                "success": False,
+                "branches": [],
+                "default_branch": None,
+                "message": "Could not parse GitHub owner and repository from URL"
+            }
 
-        logger.info(f"🔍 Parsed owner: {owner}, repo: {repo}")
+        logger.info(f"✅ Parsed owner: {owner}, repo: {repo}")
 
         # Set up headers
         headers = {
@@ -1342,48 +1505,88 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
         # Add token if provided
         if req.github_token:
             headers['Authorization'] = f'token {req.github_token}'
+            logger.info(f"🔑 Using GitHub token for authentication")
 
         # First, fetch repository info to get the default branch
         repo_info_url = f"https://api.github.com/repos/{owner}/{repo}"
-        repo_response = requests.get(repo_info_url, headers=headers, timeout=10)
+        logger.info(f"📡 Fetching repo info from: {repo_info_url}")
+        
+        try:
+            repo_response = requests.get(repo_info_url, headers=headers, timeout=10)
+            logger.info(f"📡 Repo info response code: {repo_response.status_code}")
+        except requests.Timeout:
+            logger.error(f"⏱️ Timeout fetching repo info from {repo_info_url}")
+            return {
+                "success": False,
+                "branches": [],
+                "default_branch": None,
+                "message": "Timeout connecting to GitHub. Please try again."
+            }
 
         default_branch = None
         if repo_response.ok:
             repo_data = repo_response.json()
             default_branch = repo_data.get('default_branch')
+            logger.info(f"✅ Default branch: {default_branch}")
+        else:
+            logger.warning(f"⚠️ Could not fetch repo info (status {repo_response.status_code}): {repo_response.text[:200]}")
 
         # GitHub API endpoint for branches
         api_url = f"https://api.github.com/repos/{owner}/{repo}/branches"
+        logger.info(f"📡 Fetching branches from: {api_url}")
 
         # Fetch branches
-        response = requests.get(api_url, headers=headers, timeout=10)
-
-        if response.status_code == 404:
+        try:
+            response = requests.get(api_url, headers=headers, timeout=10)
+            logger.info(f"📡 Branches response code: {response.status_code}")
+        except requests.Timeout:
+            logger.error(f"⏱️ Timeout fetching branches from {api_url}")
             return {
                 "success": False,
                 "branches": [],
                 "default_branch": None,
-                "message": "Repository not found or not accessible"
+                "message": "Timeout connecting to GitHub. Please try again."
+            }
+
+        if response.status_code == 404:
+            logger.error(f"❌ Repository not found: {owner}/{repo}")
+            return {
+                "success": False,
+                "branches": [],
+                "default_branch": None,
+                "message": f"Repository '{owner}/{repo}' not found or not accessible. Check spelling and permissions."
             }
 
         if response.status_code == 403:
+            logger.error(f"❌ Access forbidden (rate limit or permissions)")
             return {
                 "success": False,
                 "branches": [],
                 "default_branch": None,
-                "message": "Rate limit exceeded or insufficient permissions. Try adding a GitHub token."
+                "message": "GitHub rate limit exceeded or insufficient permissions. Please add a GitHub Personal Access Token."
             }
 
         if not response.ok:
+            logger.error(f"❌ GitHub API error {response.status_code}: {response.text[:200]}")
             return {
                 "success": False,
                 "branches": [],
                 "default_branch": None,
-                "message": f"GitHub API error: {response.status_code}"
+                "message": f"GitHub API error: {response.status_code}. {response.text[:100]}"
             }
 
         branches_data = response.json()
+        if not isinstance(branches_data, list):
+            logger.error(f"❌ Unexpected response format from GitHub API: {type(branches_data)}")
+            return {
+                "success": False,
+                "branches": [],
+                "default_branch": None,
+                "message": "Unexpected response format from GitHub API"
+            }
+        
         branch_names = [branch['name'] for branch in branches_data]
+        logger.info(f"✅ Found {len(branch_names)} branches: {branch_names}")
 
         # Return branches with the default branch first, then common ones
         sorted_branches = []
@@ -1403,6 +1606,7 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
             if branch not in sorted_branches:
                 sorted_branches.append(branch)
 
+        logger.info(f"✅ Returning {len(sorted_branches)} sorted branches")
         return {
             "success": True,
             "branches": sorted_branches,
@@ -1411,18 +1615,20 @@ async def fetch_branches(req: FetchBranchesRequest, current_user: dict = Depends
         }
 
     except requests.RequestException as e:
-        logger.error(f"Error fetching branches: {e}")
+        logger.error(f"❌ Network error fetching branches: {e}", exc_info=True)
         return {
             "success": False,
             "branches": [],
-            "message": "Unable to connect to GitHub. Please check your internet connection."
+            "default_branch": None,
+            "message": f"Network error: {str(e)[:100]}"
         }
     except Exception as e:
-        logger.error(f"Error in fetch_branches: {e}")
+        logger.error(f"❌ Error in fetch_branches: {e}", exc_info=True)
         return {
             "success": False,
             "branches": [],
-            "message": str(e)
+            "default_branch": None,
+            "message": f"Error: {str(e)[:100]}"
         }
 
 @app.post("/update-code-by-id")

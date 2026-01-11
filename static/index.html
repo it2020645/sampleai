@@ -784,6 +784,15 @@
                 </div>
                 <form id="add-repo-form">
                     <div class="form-group">
+                        <label for="github-token">GitHub Token *</label>
+                        <input type="password" id="github-token" name="github_token" required
+                               placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+                        <small style="color: var(--text-muted); display: block; margin-top: 5px; font-size: 0.85em;">
+                            🔑 Required for secure authentication and API access
+                        </small>
+                    </div>
+
+                    <div class="form-group">
                         <label for="github-url">GitHub URL *</label>
                         <input type="url" id="github-url" name="github_url" required 
                                placeholder="https://github.com/username/repo">
@@ -802,20 +811,14 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="github-token">GitHub Token (Optional)</label>
-                        <input type="password" id="github-token" name="github_token"
-                               placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
-                    </div>
-
-                    <div class="form-group">
                         <label for="branch">Branch</label>
-                        <select id="branch" name="branch">
-                            <option value="default" selected>default</option>
+                        <select id="branch" name="branch" required>
+                            <option value="" disabled selected>🔄 Enter GitHub URL above to load branches...</option>
                             <option value="main">main</option>
                             <option value="master">master</option>
                         </select>
                         <small style="color: var(--text-muted); display: block; margin-top: 5px; font-size: 0.85em;">
-                            Add GitHub URL and token to load branches automatically
+                            ✨ Branches will auto-load when you enter your GitHub URL and token
                         </small>
                     </div>
                     
@@ -1011,9 +1014,56 @@
             const formData = new FormData(e.target);
             pendingRepoData = Object.fromEntries(formData);
 
-            // Show confirmation modal to get tech stack
-            showTechStackConfirmationModal();
+            // Try to auto-detect tech stack from repository
+            await autoDetectAndProceed();
         });
+
+        // Auto-detect tech stack from repository
+        async function autoDetectAndProceed() {
+            if (!pendingRepoData) return;
+
+            try {
+                showRepoModal(
+                    'info',
+                    '🔍',
+                    'Analyzing Repository',
+                    'Detecting tech stack from existing code...',
+                    'Please wait'
+                );
+
+                // Call auto-detect endpoint
+                const detectResponse = await fetch(`${API_BASE}/detect-techstack`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        github_url: pendingRepoData.github_url,
+                        github_token: pendingRepoData.github_token
+                    })
+                });
+
+                const detectResult = await detectResponse.json();
+                closeEmptyRepoModal();
+
+                if (detectResult.detected && detectResult.tech_stack) {
+                    // Tech stack auto-detected, proceed directly
+                    logger.info(f"✅ Auto-detected tech stack: {detectResult.tech_stack}");
+                    submitRepository(detectResult.tech_stack);
+                } else {
+                    // Could not auto-detect, ask user
+                    logger.info("⚠️ Could not auto-detect, showing manual input modal");
+                    showTechStackConfirmationModal();
+                }
+
+            } catch (error) {
+                console.error('Error auto-detecting tech stack:', error);
+                closeEmptyRepoModal();
+                // Fall back to manual input
+                showTechStackConfirmationModal();
+            }
+        }
 
         // Validate tech stack with AI before submitting
         async function validateAndSubmitRepository(techStack) {
@@ -1344,12 +1394,17 @@
             }
         }
         
+        // Store previous jobs data to avoid flickering on no-change
+        let previousJobsData = null;
+
         async function loadActiveJobs() {
             const loadingDiv = document.getElementById('jobs-loading');
             const jobsList = document.getElementById('jobs-list');
 
-            loadingDiv.style.display = 'block';
-            jobsList.innerHTML = '';
+            // Show loading only if no jobs have been loaded yet
+            if (previousJobsData === null) {
+                loadingDiv.style.display = 'block';
+            }
 
             try {
                 const response = await fetch(`${API_BASE}/active-jobs`, {
@@ -1360,21 +1415,30 @@
                     const data = await response.json();
                     const jobs = data.jobs || [];
 
-                    if (jobs.length === 0) {
-                        jobsList.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 40px 20px;">No active jobs</p>';
-                    } else {
-                        jobsList.innerHTML = '';
-                        jobs.forEach((job, index) => {
-                            const jobItem = createJobItem(job, index + 1);
-                            jobsList.appendChild(jobItem);
-                        });
+                    // Create a hash of the current jobs data for comparison
+                    const currentJobsHash = JSON.stringify(jobs);
+
+                    // Only update DOM if data has changed
+                    if (previousJobsData !== currentJobsHash) {
+                        if (jobs.length === 0) {
+                            jobsList.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 40px 20px;">No active jobs</p>';
+                        } else {
+                            jobsList.innerHTML = '';
+                            jobs.forEach((job, index) => {
+                                const jobItem = createJobItem(job, index + 1);
+                                jobsList.appendChild(jobItem);
+                            });
+                        }
+                        previousJobsData = currentJobsHash;
                     }
                 } else {
                     jobsList.innerHTML = '<p style="text-align: center; color: var(--danger);">Error loading active jobs</p>';
+                    previousJobsData = null;
                 }
             } catch (error) {
                 console.error('Error loading jobs:', error);
                 jobsList.innerHTML = '<p style="text-align: center; color: var(--danger);">Error loading active jobs</p>';
+                previousJobsData = null;
             } finally {
                 loadingDiv.style.display = 'none';
             }
@@ -1786,10 +1850,17 @@
                 } else {
                     // Fallback to default branches
                     console.warn('Falling back to default branches. Reason:', result.message || 'No branches returned');
+                    
+                    // Show error message to user
+                    const errorMsg = result.message ? `\n(${result.message})` : '';
+                    alert(`⚠️ Could not fetch branches automatically${errorMsg}\n\nPlease select your branch manually or add a GitHub token to fetch automatically.`);
+                    
                     branchSelect.innerHTML = `
-                        <option value="default" selected>default</option>
+                        <option value="" selected disabled>Select your branch...</option>
                         <option value="main">main</option>
                         <option value="master">master</option>
+                        <option value="develop">develop</option>
+                        <option value="development">development</option>
                     `;
                     if (result.message) {
                         console.warn('Branch fetch warning:', result.message);
@@ -1801,10 +1872,15 @@
             } catch (error) {
                 console.error('Error fetching branches:', error);
                 // Fallback to default branches
+                const errorMsg = error.message || 'Unknown error';
+                alert(`⚠️ Error fetching branches: ${errorMsg}\n\nPlease select your branch manually.`);
+                
                 branchSelect.innerHTML = `
-                    <option value="default" selected>default</option>
+                    <option value="" selected disabled>Select your branch...</option>
                     <option value="main">main</option>
                     <option value="master">master</option>
+                    <option value="develop">develop</option>
+                    <option value="development">development</option>
                 `;
                 branchSelect.disabled = false;
             }
