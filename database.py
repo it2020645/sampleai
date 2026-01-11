@@ -363,6 +363,16 @@ class RDBMS:
         session.close()
         return running is not None
 
+    def has_completed_awaiting_approval(self, repo_id: int) -> bool:
+        """Check if repository has a completed job awaiting approval/rejection."""
+        session = self.get_session()
+        job = session.query(Job).filter(
+            Job.repo_id == repo_id,
+            Job.status == "completed"
+        ).first()
+        session.close()
+        return job is not None
+
     def get_job_status(self, job_id: int) -> Optional[Dict[str, Any]]:
         """Get status of a specific job."""
         session = self.get_session()
@@ -383,6 +393,29 @@ class RDBMS:
         session.close()
         return [job_dict for job_dict in (to_dict(job) for job in jobs) if job_dict is not None]
 
+    def get_active_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get all active jobs (running + pending only, excluding completed/approved/rejected)."""
+        session = self.get_session()
+        jobs = (
+            session.query(Job)
+            .filter(Job.status.in_(["running", "pending"]))
+            .order_by(Job.status.desc(), Job.created_at.asc())  # running first, then pending by creation time
+            .limit(limit)
+            .all()
+        )
+        session.close()
+        # Enrich with repository info
+        result = []
+        for job in jobs:
+            job_dict = to_dict(job)
+            if job_dict:
+                # Get repository info
+                repo = self.get_repository(job_dict['repo_id'])
+                if repo:
+                    job_dict['repo_name'] = repo.get('name', 'Unknown')
+                    job_dict['repo_github_url'] = repo.get('github_url', '')
+                result.append(job_dict)
+        return result
     def get_user_by_google_id(self, google_id: str) -> Optional[Dict[str, Any]]:
         """Get user by Google ID."""
         session = self.get_session()

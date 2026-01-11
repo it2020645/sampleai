@@ -1503,6 +1503,16 @@ async def get_repository_jobs(repo_id: int, current_user: dict = Depends(get_cur
         "total": len(jobs)
     }
 
+@app.get("/active-jobs")
+async def get_active_jobs(current_user: dict = Depends(get_current_user)):
+    """Get all active jobs (running + pending only, excluding completed/approved/rejected)."""
+    jobs = db.get_active_jobs()
+    return {
+        "jobs": jobs,
+        "total": len(jobs),
+        "statuses": ["running", "pending"]
+    }
+
 @app.post("/update-code")
 async def update_code(req: UpdateRequest, authorization: Optional[str] = Header(None)):
     start_time = time.time()

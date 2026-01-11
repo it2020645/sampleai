@@ -851,6 +851,23 @@
                     <!-- Repositories will be loaded here -->
                 </div>
             </div>
+
+            <!-- Active Jobs Queue -->
+            <div class="card full-width">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--glass-border); padding-bottom: 15px;">
+                    <h2 style="margin-bottom: 0; border: none; padding: 0;">⏳ Active Jobs Queue</h2>
+                    <button class="btn btn-secondary" onclick="loadActiveJobs()" style="padding: 8px 15px; font-size: 0.85rem;">🔄 Refresh</button>
+                </div>
+                
+                <div class="loading" id="jobs-loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p style="text-align: center; color: var(--text-muted);">Loading jobs...</p>
+                </div>
+                
+                <div id="jobs-list" style="max-height: 600px; overflow-y: auto;">
+                    <p style="color: var(--text-muted); text-align: center; padding: 40px 20px;">No active jobs</p>
+                </div>
+            </div>
             
             <!-- Execute Code Changes -->
             <div class="execute-section full-width">
@@ -955,8 +972,12 @@
                     }
                 }
 
-                // User is authenticated, load repositories
+                // User is authenticated, load repositories and active jobs
                 loadRepositories();
+                loadActiveJobs();
+                
+                // Refresh active jobs every 3 seconds
+                setInterval(loadActiveJobs, 3000);
             } catch (error) {
                 console.error('Error checking authentication:', error);
                 window.location.href = '/login.html';
@@ -1321,6 +1342,70 @@
             } finally {
                 loadingDiv.style.display = 'none';
             }
+        }
+        
+        async function loadActiveJobs() {
+            const loadingDiv = document.getElementById('jobs-loading');
+            const jobsList = document.getElementById('jobs-list');
+
+            loadingDiv.style.display = 'block';
+            jobsList.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/active-jobs`, {
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const jobs = data.jobs || [];
+
+                    if (jobs.length === 0) {
+                        jobsList.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 40px 20px;">No active jobs</p>';
+                    } else {
+                        jobsList.innerHTML = '';
+                        jobs.forEach((job, index) => {
+                            const jobItem = createJobItem(job, index + 1);
+                            jobsList.appendChild(jobItem);
+                        });
+                    }
+                } else {
+                    jobsList.innerHTML = '<p style="text-align: center; color: var(--danger);">Error loading active jobs</p>';
+                }
+            } catch (error) {
+                console.error('Error loading jobs:', error);
+                jobsList.innerHTML = '<p style="text-align: center; color: var(--danger);">Error loading active jobs</p>';
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+        
+        function createJobItem(job, position) {
+            const div = document.createElement('div');
+            div.className = 'repo-item';
+            div.style.borderLeft = job.status === 'running' ? '3px solid var(--primary)' : '2px solid rgba(255, 255, 255, 0.1)';
+            
+            const statusBadge = job.status === 'running' 
+                ? '<span class="status-badge status-success">⚡ RUNNING</span>'
+                : '<span class="status-badge status-pending">⏳ PENDING</span>';
+            
+            const position_text = job.status === 'running' ? '🎯 Currently Executing' : `#${position} in Queue`;
+            
+            div.innerHTML = `
+                <div>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <span style="font-weight: bold; color: var(--primary);">${position_text}</span>
+                        ${statusBadge}
+                    </div>
+                    <div style="color: var(--text-main); font-weight: bold; margin-bottom: 5px;">Job #${job.id}</div>
+                    <div style="color: var(--text-muted); font-size: 0.9em; margin-bottom: 5px;">📁 ${job.repo_name || 'Unknown Repo'}</div>
+                    <div style="color: var(--text-muted); font-size: 0.85em; margin-bottom: 8px; max-width: 600px;">📝 ${job.instructions.substring(0, 120)}${job.instructions.length > 120 ? '...' : ''}</div>
+                    <div style="color: var(--text-muted); font-size: 0.8em;">
+                        Created: ${new Date(job.created_at).toLocaleString()}
+                    </div>
+                </div>
+            `;
+            return div;
         }
         
         // Create repository item HTML

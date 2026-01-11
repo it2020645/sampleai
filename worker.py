@@ -62,7 +62,7 @@ async def process_job(job: dict, repo: dict):
             pr_target_branch="master"
         )
         
-        # Mark job as completed
+        # Mark job as completed (PR created, now awaiting human approval/rejection)
         db.update_job_status(
             job_id,
             "completed",
@@ -75,6 +75,8 @@ async def process_job(job: dict, repo: dict):
              db.update_vulnerability_status(vuln_id, "resolved")
         
         logger.info(f"✅ Job {job_id} completed successfully")
+        logger.info(f"   PR has been created and is awaiting human approval")
+        logger.info(f"   Next pending job for this repo will start ONLY after approval/rejection")
         
     except Exception as e:
         logger.error(f"❌ Job {job_id} failed with error: {str(e)}", exc_info=True)
@@ -86,12 +88,24 @@ async def process_job(job: dict, repo: dict):
 
 
 async def process_repositories():
-    """Background worker that processes queued jobs per repository."""
+    """Background worker that processes queued jobs per repository sequentially.
+    
+    Job Status Flow:
+    - pending: In queue, waiting to run
+    - running: Aider is executing
+    - completed: PR created, waiting for human approval/rejection
+    - approved: PR merged to main ✅
+    - rejected: PR closed without merge ❌
+    
+    Key Rule: Only ONE job per repo can be in 'running' or 'completed' state.
+              Next pending job starts ONLY after current job is approved/rejected.
+    """
     logger.info("=" * 70)
     logger.info("🤖 AI Code Assistant - Background Job Processor")
     logger.info("=" * 70)
     logger.info(f"Database: {os.getenv('DATABASE_URL', 'SQLite')}")
     logger.info("Processing jobs sequentially per repository...")
+    logger.info("Sequential rule: One job at a time per repo (pending → running → completed → approved/rejected)")
     logger.info("=" * 70)
     
     while True:
@@ -105,19 +119,27 @@ async def process_repositories():
             for repo in repos:
                 repo_id = repo['id']
                 
-                # Skip if already running a job for this repo
+                # Check 1: If job is running, skip this repo
                 if db.has_running_job(repo_id):
-                    logger.debug(f"⏳ Repo {repo_id} ({repo['name']}) already has a running job")
+                    logger.debug(f"⏳ Repo {repo_id} ({repo['name']}) has a running job, waiting for completion")
                     continue
                 
-                # Get next pending job for this repo
+                # Check 2: If a job is completed and awaiting approval, skip this repo
+                # (human must approve/reject before next job can start)
+                if db.has_completed_awaiting_approval(repo_id):
+                    logger.debug(f"⏸️  Repo {repo_id} ({repo['name']}) has a completed job awaiting approval")
+                    logger.debug(f"   Please approve/reject the PR before next job can start")
+                    continue
+                
+                # Check 3: Safe to get next pending job
                 job = db.get_next_job(repo_id)
                 if not job:
                     continue
                 
-                logger.info(f"📋 Found pending job {job['id']} for repo {repo_id}")
+                logger.info(f"📋 Found pending job {job['id']} for repo {repo_id} ({repo['name']})")
+                logger.info(f"   Instructions: {job['instructions'][:80]}...")
                 
-                # Process the job
+                # Process the job (will mark as completed when done)
                 await process_job(job, repo)
             
             # Check for new jobs every 5 seconds
